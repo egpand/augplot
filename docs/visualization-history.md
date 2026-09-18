@@ -1,16 +1,16 @@
 # How visualization history works
 
-Each `Visualizer` tracks its current version. Saved history is shared across instances
-and kernel restarts. Python variable names don't identify saved plots.
+Each value returned by `ap.plot()` tracks its current version. Saved history is shared
+across instances and kernel restarts. Python variable names don't identify saved plots.
 
 ```python
-from augplot import plot
+import augplot as ap
 
-campaign_viz = plot(data)                  # original A
+campaign_viz = ap.plot(data)                  # original A
 campaign_viz.refine("Horizontal bars")     # A → B
 campaign_viz.refine("Add labels")          # B → C
 
-viz = plot(data)                           # loads A, not C
+viz = ap.plot(data)                           # loads A, not C
 viz.refine("Horizontal bars")              # loads B
 viz.refine("Add labels")                   # loads C
 ```
@@ -29,7 +29,7 @@ The original lookup combines a fingerprint of the full data—values, order, nam
 and types—with the prompt and generation settings. Each refinement also includes its
 exact parent version and instruction.
 
-- **Rerun from `plot(data)`:** replay the original and its refinements from disk.
+- **Rerun from `ap.plot(data)`:** replay the original and its refinements from disk.
 - **Repeat only a refinement cell:** edit the current version again; this may call the LLM.
 - **`viz.render(new_data)`:** reuse current code without inference or a new version.
 - **`regenerate=True`:** explicitly replace a step's lookup; earlier source files remain.

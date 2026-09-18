@@ -1,6 +1,6 @@
 """Notebook visualizations with inspectable, reusable Python source."""
 
-from .core import Visualizer, plot
+from .core import plot
 from .errors import (
     ConfigurationError,
     DataError,
@@ -11,7 +11,6 @@ from .errors import (
 )
 
 __all__ = [
-    "Visualizer",
     "plot",
     "AugplotError",
     "ConfigurationError",

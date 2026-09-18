@@ -12,7 +12,8 @@ import pandas as pd
 import pytest
 from conftest import ARRAY_CODE, CV_CODE, DF_CODE, PLOTLY_CODE, response
 
-from augplot import ConfigurationError, GenerationError, ProviderError, ScopeError, Visualizer, plot
+from augplot import ConfigurationError, GenerationError, ProviderError, ScopeError, plot
+from augplot.core import _Visualization
 
 
 def test_fit_refine_and_render(cv_data, fake_model):
@@ -142,7 +143,7 @@ def test_payload_contains_profile_not_full_data(fake_model):
 def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypatch):
     calls = fake_model(response(ARRAY_CODE), response(ARRAY_CODE))
     monkeypatch.setenv("AUGPLOT_API_BASE", "https://environment.example")
-    viz = Visualizer()
+    viz = _Visualization()
     monkeypatch.setenv("AUGPLOT_MODEL", "new/model")
     viz.fit([1, 2], show=False)
     assert calls[0]["model"] == "new/model"
@@ -155,7 +156,7 @@ def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypa
 
 def test_missing_model_and_unfitted_operations(monkeypatch):
     monkeypatch.delenv("AUGPLOT_MODEL", raising=False)
-    viz = Visualizer()
+    viz = _Visualization()
     with pytest.raises(ConfigurationError, match="AUGPLOT_MODEL"):
         viz.fit([1, 2])
     for operation in (lambda: viz.refine("change"), viz.render, viz.save):
@@ -176,7 +177,7 @@ def test_missing_model_and_unfitted_operations(monkeypatch):
 )
 def test_invalid_configuration(kwargs):
     with pytest.raises(ConfigurationError):
-        Visualizer(**kwargs)
+        _Visualization(**kwargs)
 
 
 @pytest.mark.parametrize(

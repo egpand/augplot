@@ -14,7 +14,7 @@ from .profiling import copy_data, profile_data, validate_data
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPT
 
 
-class Visualizer:
+class _Visualization:
     """Generate, refine, and export a plot using a provider model and a plotting backend.
 
     Provider credentials are read by LiteLLM when a request is made. Generated Python
@@ -294,11 +294,11 @@ class Visualizer:
 
     def __repr__(self):
         state = "fitted" if self.code is not None else "unfitted"
-        return f"Visualizer(backend={self.backend!r}, state={state!r})"
+        return f"Augplot(backend={self.backend!r}, state={state!r})"
 
 
 def plot(
     data, prompt: str = "auto", *, show: bool = True, regenerate: bool = False, **kwargs
-) -> Visualizer:
-    """Fit and return a Visualizer. Keyword arguments configure Visualizer()."""
-    return Visualizer(**kwargs).fit(data, prompt=prompt, show=show, regenerate=regenerate)
+) -> _Visualization:
+    """Create and return a visualization that can be refined, rendered, and saved."""
+    return _Visualization(**kwargs).fit(data, prompt=prompt, show=show, regenerate=regenerate)

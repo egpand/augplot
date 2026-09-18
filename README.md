@@ -40,14 +40,14 @@ visualizing supplied forecasts, intervals, and missed observations.
 ## Plot, refine, reuse
 
 ```python
-from augplot import plot
+import augplot as ap
 
 results = {
     "ridge": {"r2": [0.71, 0.75, 0.73]},
     "forest": {"r2": [0.80, 0.82, 0.81]},
 }
 
-viz = plot(results)  # automatically chooses a chart and displays it
+viz = ap.plot(results)  # automatically chooses a chart and displays it
 viz.refine("Highlight the model with the highest mean R² and label its score")
 viz.render(results, title="Model comparison")  # reuse code; no LLM call
 
@@ -64,13 +64,12 @@ fig = plot_cv_results(results)
 fig
 ```
 
-Exports refuse to overwrite existing function names. The class API is also available:
-`Visualizer(...).fit(data, prompt="...")`. Refinement uses the fitted data snapshot;
-`render(new_data)` keeps the current code and leaves that snapshot unchanged.
+Exports refuse to overwrite existing function names. Refinement uses the fitted data
+snapshot; `render(new_data)` keeps the current code and leaves that snapshot unchanged.
 
 ## Options
 
-Pass these to `plot()` or `Visualizer()`:
+Pass these to `ap.plot()`:
 
 | Option | Default | Purpose |
 | --- | --- | --- |
@@ -91,7 +90,7 @@ settings replay the original plot and its refinement sequence without LLM calls,
 even after a kernel restart. Changed inputs may generate new code.
 
 **Keep `.augplot/` with your notebook—the `.ipynb` alone does not contain the history.**
-Use `regenerate=True` on `plot()`, `fit()`, or `refine()` to explicitly request new code.
+Use `regenerate=True` on `ap.plot()`, `fit()`, or `refine()` to explicitly request new code.
 
 See [How visualization history works](docs/visualization-history.md) for examples.
 

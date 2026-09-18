@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import pytest
 from PIL import Image as PillowImage
 
-from augplot import ConfigurationError, Visualizer
+from augplot import ConfigurationError
+from augplot.core import _Visualization
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ def test_explicit_display_preserves_figure_and_notebook_settings(format_name, no
     before_dpi = fig.dpi
     before_size = fig.get_size_inches().copy()
     try:
-        Visualizer(display_format=format_name)._display(fig)
+        _Visualization(display_format=format_name)._display(fig)
         assert len(notebook_display) == 1
         output = notebook_display[0]
         if format_name == "svg":
@@ -57,7 +58,7 @@ def test_explicit_display_preserves_figure_and_notebook_settings(format_name, no
 def test_plotly_keeps_its_renderer(notebook_display):
     go = pytest.importorskip("plotly.graph_objects")
     fig = go.Figure(go.Scatter(y=[1, 2]))
-    Visualizer(backend="plotly")._display(fig)
+    _Visualization(backend="plotly")._display(fig)
     assert notebook_display == [fig]
 
 
@@ -68,9 +69,9 @@ def test_script_does_not_render(monkeypatch):
         pytest.fail("Display should not run outside a notebook kernel")
 
     monkeypatch.setattr(IPython.display, "display", unexpected_display)
-    Visualizer()._display(object())
+    _Visualization()._display(object())
 
 
 def test_invalid_format_rejected():
     with pytest.raises(ConfigurationError, match="display_format"):
-        Visualizer(display_format="jpeg")
+        _Visualization(display_format="jpeg")

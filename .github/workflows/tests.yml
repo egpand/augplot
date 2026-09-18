@@ -21,4 +21,4 @@ jobs:
           python -m venv /tmp/augplot-wheel
           /tmp/augplot-wheel/bin/pip install dist/*.whl
           cd /tmp
-          /tmp/augplot-wheel/bin/python -c "from augplot import Visualizer; print(Visualizer())"
+          /tmp/augplot-wheel/bin/python -c "import augplot as ap; print(ap.plot)"
