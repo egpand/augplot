@@ -19,7 +19,7 @@ from notebook_charts import (
 
 
 def test_example_in_real_kernel_with_mocked_inference(tmp_path):
-    """Execute the actual example offline, including export and interactive output."""
+    """Execute the actual example offline, including Python output and interactive output."""
     notebook = nbformat.read(
         Path(__file__).parents[1] / "examples" / "quickstart.ipynb", as_version=4
     )
@@ -158,6 +158,6 @@ provider.complete = offline_complete
                 if "application/vnd.plotly.v1+json" in output.get("data", {})
             ]
             assert len(figures) == 1
-    exported = tmp_path / "vis_utils.py"
+    exported = tmp_path / "augplot_utils.py"
     assert exported.exists()
     assert "def plot_penguin_bills" in exported.read_text()

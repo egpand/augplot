@@ -53,26 +53,19 @@ plt.refine(
 ```python
 plt.render(penguins[penguins["island"] == "Biscoe"])
 plt.figure.savefig("penguin_bills.png", dpi=300)
-plt.save("plots.py", function_name="plot_penguin_bills")
+plt.to_python(function_name="plot_penguin_bills")
 ```
 
-Inspect the generated source with `plt.code`.
+With no path, `to_python()` writes `augplot_utils.py` in the notebook's working directory
+and returns its path. New function names are appended; rerunning the same function safely
+updates its Augplot-generated definition. Inspect the generated source directly with
+`plt.code`.
 
 `ap.load_sns_dataset()` is a thin wrapper around `seaborn.load_dataset()`, so examples do
 not need a separate Seaborn import. The first load requires internet access; Seaborn caches
-the CSV locally by default. These datasets are intended for examples, not production data.
-
-The 22 currently supported datasets cover these useful demo shapes:
-
-| Shape | Datasets | Good for |
-| --- | --- | --- |
-| Small experiments | `anagrams`, `attention`, `exercise` | grouped comparisons and repeated measures |
-| Statistical classics | `anscombe`, `iris`, `penguins`, `geyser`, `tips` | relationships, distributions, facets, and regression |
-| Time series | `dowjones`, `flights`, `fmri`, `seaice` | trends, ordered categories, uncertainty, and heatmaps |
-| Larger tabular data | `diamonds`, `mpg`, `taxis`, `titanic` | multivariate comparisons and aggregation |
-| Domain data | `brain_networks`, `car_crashes`, `glue`, `healthexp`, `planets`, `dots` | wide data, rankings, panels, and scientific measurements |
-
-The exact names are also available as `ap.SNS_DATASETS`.
+the CSV locally by default. Dataset documentation and provenance belong to the
+[Seaborn example-data catalog](https://github.com/mwaskom/seaborn-data). These datasets
+are intended for examples, not production data.
 
 ## Configuration
 

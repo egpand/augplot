@@ -8,14 +8,14 @@ from pathlib import Path
 from . import provider
 from .errors import ConfigurationError, GenerationError
 from .execution import execute, parse_response
-from .exporting import save_function
+from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPT
 
 
 class _Visualization:
-    """Generate, refine, and export a plot using a provider model and a plotting backend.
+    """Generate, refine, and reuse a plot with inspectable Python source.
 
     Provider credentials are read by LiteLLM when a request is made. Generated Python
     executes locally after conservative checks; it is not sandboxed. Data samples are
@@ -246,7 +246,9 @@ class _Visualization:
 
     def _require_fit(self):
         if self.code is None:
-            raise ConfigurationError("Call fit(data) before refining, rendering, or saving.")
+            raise ConfigurationError(
+                "Call fit(data) before refining, rendering, or writing Python code."
+            )
 
     @property
     def data_fingerprint(self):
@@ -285,12 +287,13 @@ class _Visualization:
             self._display(figure)
         return self
 
-    def save(
-        self, path: str | Path = "vis_utils.py", *, function_name: str = "plot_visualization"
+    def to_python(
+        self, path: str | Path | None = None, *, function_name: str = "plot_visualization"
     ) -> Path:
-        """Export the current function and print a notebook usage example, without an LLM call."""
+        """Write reusable Python to a local module, without an LLM call."""
         self._require_fit()
-        return save_function(self.code, path, function_name, backend=self.backend)
+        target = Path("augplot_utils.py") if path is None else Path(path)
+        return write_python_function(self.code, target, function_name, backend=self.backend)
 
     def __repr__(self):
         state = "fitted" if self.code is not None else "unfitted"
@@ -300,5 +303,5 @@ class _Visualization:
 def plot(
     data, prompt: str = "auto", *, show: bool = True, regenerate: bool = False, **kwargs
 ) -> _Visualization:
-    """Create and return a visualization that can be refined, rendered, and saved."""
+    """Create a visualization that can be refined, rendered, and written as Python."""
     return _Visualization(**kwargs).fit(data, prompt=prompt, show=show, regenerate=regenerate)

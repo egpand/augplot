@@ -13,3 +13,4 @@ build/
 vis_utils.py
 examples/vis_utils.py
 examples/.augplot
+augplot_utils*.py

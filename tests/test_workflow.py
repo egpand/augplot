@@ -159,7 +159,7 @@ def test_missing_model_and_unfitted_operations(monkeypatch):
     viz = _Visualization()
     with pytest.raises(ConfigurationError, match="AUGPLOT_MODEL"):
         viz.fit([1, 2])
-    for operation in (lambda: viz.refine("change"), viz.render, viz.save):
+    for operation in (lambda: viz.refine("change"), viz.render, viz.to_python):
         with pytest.raises(ConfigurationError, match="fit"):
             operation()
 

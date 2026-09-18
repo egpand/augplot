@@ -34,7 +34,9 @@ exact parent version and instruction.
 - **`plt.render(new_data)`:** reuse current code without inference or a new version.
 - **`regenerate=True`:** explicitly replace a step's lookup; earlier source files remain.
   Remove the flag afterward to resume reuse.
-- **`plt.save("vis_utils.py", function_name="plot_results")`:** export the current version.
+- **`plt.to_python(function_name="plot_results")`:** write the current version as reusable
+  Python source in `augplot_utils.py`, appending new functions or updating the same
+  Augplot-generated function on reruns.
 
 Inspect `plt.history_path`, `plt.data_fingerprint`, and `plt.cache_hit` for the current
 source file, fitted-data hash, and whether the last fit/refine reused saved code.

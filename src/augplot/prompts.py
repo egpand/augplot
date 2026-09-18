@@ -53,7 +53,7 @@ Do not use any other imports, files, URLs, network, environment variables,
 introspection, dynamic execution, dunder/private attributes, classes, nested
 functions, decorators, while loops, or recursion. Do not use global variables.
 Do not call show(), display(), close(), savefig(), or change global styles.
-The caller manages display, styling, and export. Return exactly one Figure;
+The caller manages display, styling, and reusable Python output. Return exactly one Figure;
 use subplots inside it when needed. Standard loops and comprehensions are fine.
 
 Backend rules:

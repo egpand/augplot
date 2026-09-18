@@ -186,12 +186,12 @@ def test_cache_can_be_disabled_or_relocated(fake_model, tmp_path):
     assert len(calls) == 4
 
 
-def test_export_uses_current_refinement(fake_model, tmp_path):
+def test_to_python_uses_current_refinement(fake_model, tmp_path):
     revised = ARRAY_CODE.replace('"Values"', '"New"')
     fake_model(response(ARRAY_CODE), response(revised))
     plot([1, 2], show=False).refine("New title", show=False)
     replay = plot([1, 2], show=False).refine("New title", show=False)
-    path = replay.save(tmp_path / "vis_utils.py", function_name="plot_results")
+    path = replay.to_python(tmp_path / "vis_utils.py", function_name="plot_results")
     assert "def plot_results(" in path.read_text()
     assert "'New'" in path.read_text()
 
