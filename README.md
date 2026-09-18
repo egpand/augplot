@@ -40,16 +40,16 @@ Then work directly with notebook data:
 ```python
 import augplot as ap
 
-viz = ap.plot(data, prompt="Plot revenue by month")
-viz.refine("Use a line chart and label the latest value")
+viz = ap.plot(training_history, prompt="Plot training and validation loss by epoch")
+viz.refine("Use a log scale and mark the epoch with the lowest validation loss")
 ```
 
 `ap.plot()` returns the visualization, so it can be reused without another model call:
 
 ```python
-viz.render(updated_data)
-viz.figure.savefig("revenue.png", dpi=300)
-viz.save("plots.py", function_name="plot_revenue")
+viz.render(next_run_history)
+viz.figure.savefig("loss.png", dpi=300)
+viz.save("plots.py", function_name="plot_training_loss")
 ```
 
 Inspect the generated source with `viz.code`.
