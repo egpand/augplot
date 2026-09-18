@@ -10,9 +10,9 @@ campaign_viz = ap.plot(data)                  # original A
 campaign_viz.refine("Horizontal bars")     # A → B
 campaign_viz.refine("Add labels")          # B → C
 
-viz = ap.plot(data)                           # loads A, not C
-viz.refine("Horizontal bars")              # loads B
-viz.refine("Add labels")                   # loads C
+plt = ap.plot(data)                           # loads A, not C
+plt.refine("Horizontal bars")              # loads B
+plt.refine("Add labels")                   # loads C
 ```
 
 With identical inputs and the same cache directory, the second sequence makes no LLM
@@ -31,12 +31,12 @@ exact parent version and instruction.
 
 - **Rerun from `ap.plot(data)`:** replay the original and its refinements from disk.
 - **Repeat only a refinement cell:** edit the current version again; this may call the LLM.
-- **`viz.render(new_data)`:** reuse current code without inference or a new version.
+- **`plt.render(new_data)`:** reuse current code without inference or a new version.
 - **`regenerate=True`:** explicitly replace a step's lookup; earlier source files remain.
   Remove the flag afterward to resume reuse.
-- **`viz.save("vis_utils.py", function_name="plot_results")`:** export the current version.
+- **`plt.save("vis_utils.py", function_name="plot_results")`:** export the current version.
 
-Inspect `viz.history_path`, `viz.data_fingerprint`, and `viz.cache_hit` for the current
+Inspect `plt.history_path`, `plt.data_fingerprint`, and `plt.cache_hit` for the current
 source file, fitted-data hash, and whether the last fit/refine reused saved code.
 
 **Keep `.augplot/` alongside your notebook.** History defaults to `.augplot/plots/`

@@ -50,7 +50,7 @@ provider.complete = offline_complete
                 # Winners must be computed from the full data, including on local render.
                 accuracy_winner = 2 if cell.id == "augplot-07" else 4
                 cell.source += (
-                    "\nassert [i for i, bar in enumerate(viz.figure.axes[0].patches) "
+                    "\nassert [i for i, bar in enumerate(plt.figure.axes[0].patches) "
                     f"if bar.get_hatch()] == [{accuracy_winner}, 6]"
                 )
     notebook.cells.append(
@@ -85,7 +85,7 @@ provider.complete = offline_complete
         replay.cells.append(
             nbformat.v4.new_code_cell(
                 f"assert offline_calls == {expected_calls}\n"
-                f"assert viz.code == {refined!r}\n"
+                f"assert plt.code == {refined!r}\n"
                 f"assert forecast_viz.cache_hit is {expected_calls == 0}\n"
                 f"assert forecast_viz.code == {LATENCY_FORECAST!r}\n"
                 "forecast = next(line for line in forecast_viz.figure.axes[0].lines "
