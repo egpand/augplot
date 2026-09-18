@@ -42,16 +42,6 @@ DF_CODE = """def plot_data(data, *, title=None, figsize=None):
     return fig
 """
 
-PLOTLY_CODE = """def plot_data(data, *, title=None, figsize=None):
-    import plotly.express as px
-    fig = px.scatter(data, x="spend", y="revenue", color="channel",
-                     title=title or "Spend and revenue")
-    if figsize is not None:
-        fig.update_layout(width=figsize[0] * 100, height=figsize[1] * 100)
-    return fig
-"""
-
-
 def response(code, explanation="Compare the observed values."):
     return json.dumps({"code": code, "explanation": explanation})
 

@@ -50,8 +50,6 @@ def test_rejects_executable_definition_metadata_and_extra_definitions(code):
 
 def test_backend_import_enforced():
     with pytest.raises(GenerationError):
-        validate_code(ARRAY_CODE, "plotly")
-    with pytest.raises(GenerationError):
         validate_code(ARRAY_CODE.replace("ax.plot(data)", "import seaborn as sns"), "matplotlib")
 
 

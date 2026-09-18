@@ -1,6 +1,5 @@
 """Public notebook workflow, independent of the inference transport."""
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -35,8 +34,8 @@ class _Visualization:
         max_repairs: int = 1,
         cache_dir: str | Path | None = ".augplot/plots",
     ):
-        if backend not in {"auto", "matplotlib", "seaborn", "plotly"}:
-            raise ConfigurationError("backend must be auto, matplotlib, seaborn, or plotly.")
+        if backend not in {"auto", "matplotlib", "seaborn"}:
+            raise ConfigurationError("backend must be auto, matplotlib, or seaborn.")
         if display_format not in {"retina", "png", "svg"}:
             raise ConfigurationError("display_format must be retina, png, or svg.")
         if not isinstance(sample_rows, int) or not 0 <= sample_rows <= 100:
@@ -72,11 +71,6 @@ class _Visualization:
         model = self.model if self.model is not None else os.getenv("AUGPLOT_MODEL")
         if not isinstance(model, str) or not model.strip():
             raise ConfigurationError("Set AUGPLOT_MODEL or pass model='provider/model-name'.")
-        if self.backend == "plotly" and (
-            importlib.util.find_spec("plotly") is None
-            or importlib.util.find_spec("nbformat") is None
-        ):
-            raise ConfigurationError("Install Plotly support with pip install 'augplot[plotly]'.")
         api_base = self.api_base if self.api_base is not None else os.getenv("AUGPLOT_API_BASE")
         return model, api_base
 
@@ -206,14 +200,11 @@ class _Visualization:
         from IPython import get_ipython
         from IPython.core.pylabtools import print_figure, retina_figure
         from IPython.display import SVG, Image, display
-        from matplotlib.figure import Figure
 
         # Do not open browser windows or print Figure reprs from scripts.
         shell = get_ipython()
         if shell is not None and getattr(shell, "kernel", None) is not None:
-            if not isinstance(figure, Figure):
-                display(figure)
-            elif self.display_format == "retina":
+            if self.display_format == "retina":
                 rendered = retina_figure(figure)
                 if rendered is not None:
                     png, dimensions = rendered

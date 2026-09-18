@@ -55,13 +55,6 @@ def test_explicit_display_preserves_figure_and_notebook_settings(format_name, no
         plt.close(fig)
 
 
-def test_plotly_keeps_its_renderer(notebook_display):
-    go = pytest.importorskip("plotly.graph_objects")
-    fig = go.Figure(go.Scatter(y=[1, 2]))
-    _Visualization(backend="plotly")._display(fig)
-    assert notebook_display == [fig]
-
-
 def test_script_does_not_render(monkeypatch):
     monkeypatch.setattr(IPython, "get_ipython", lambda: None)
 

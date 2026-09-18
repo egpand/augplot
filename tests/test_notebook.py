@@ -12,14 +12,13 @@ from nbclient import NotebookClient
 from notebook_charts import (
     FLIGHTS_HEATMAP,
     FLIGHTS_LINES,
-    FLIGHTS_PLOTLY,
     PENGUIN_FACETS,
     PENGUIN_SCATTER,
 )
 
 
 def test_example_in_real_kernel_with_mocked_inference(tmp_path):
-    """Execute the actual example offline, including Python output and interactive output."""
+    """Execute the actual example offline, including its generated Python output."""
     notebook = nbformat.read(
         Path(__file__).parents[1] / "examples" / "quickstart.ipynb", as_version=4
     )
@@ -63,7 +62,7 @@ def offline_dataset(name, **kwargs):
         return flight_fixture.copy()
     raise AssertionError(name)
 datasets.sns.load_dataset = offline_dataset
-responses = iter({[PENGUIN_SCATTER, refined, FLIGHTS_LINES, FLIGHTS_HEATMAP, FLIGHTS_PLOTLY]!r})
+responses = iter({[PENGUIN_SCATTER, refined, FLIGHTS_LINES, FLIGHTS_HEATMAP]!r})
 offline_calls = 0
 def offline_complete(**kwargs):
     global offline_calls
@@ -74,7 +73,6 @@ provider.complete = offline_complete
     notebook.cells.insert(0, nbformat.v4.new_code_cell(setup))
     for cell in notebook.cells:
         if cell.cell_type == "code":
-            cell.source = cell.source.replace("RUN_PLOTLY = False", "RUN_PLOTLY = True")
             if cell.id == "augplot-02":
                 cell.source += (
                     '\nassert os.environ["AUGPLOT_MODEL"] == "openai/gpt-5.6-terra"\n'
@@ -104,7 +102,7 @@ provider.complete = offline_complete
         )
     )
     # The second pass starts a fresh kernel and must replay all steps from disk.
-    for expected_calls in (5, 0):
+    for expected_calls in (4, 0):
         manager = KernelManager(
             kernel_name="augplot-test",
             kernel_spec_manager=KernelSpecManager(kernel_dirs=[str(kernel_root)]),
@@ -151,13 +149,6 @@ provider.complete = offline_complete
             dimensions = output.metadata["image/png"]
             assert width // 2 == dimensions["width"]
             assert height // 2 == dimensions["height"]
-        if "RUN_PLOTLY = True" in cell.source:
-            figures = [
-                output
-                for output in cell.outputs
-                if "application/vnd.plotly.v1+json" in output.get("data", {})
-            ]
-            assert len(figures) == 1
     exported = tmp_path / "augplot_utils.py"
     assert exported.exists()
     assert "def plot_penguin_bills" in exported.read_text()

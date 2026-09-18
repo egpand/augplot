@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-from conftest import ARRAY_CODE, CV_CODE, DF_CODE, PLOTLY_CODE, response
+from conftest import ARRAY_CODE, CV_CODE, DF_CODE, response
 
 from augplot import ConfigurationError, GenerationError, ProviderError, ScopeError, plot
 from augplot.core import _Visualization
@@ -168,6 +168,7 @@ def test_missing_model_and_unfitted_operations(monkeypatch):
     "kwargs",
     [
         {"backend": "unknown"},
+        {"backend": "plotly"},
         {"sample_rows": -1},
         {"max_profile_chars": 5},
         {"timeout": 0},
@@ -192,21 +193,13 @@ def test_invalid_configuration(kwargs):
                 'ax.scatter(data["spend"], data["revenue"])',
             ),
         ),
-        ("plotly", PLOTLY_CODE),
     ],
 )
 def test_backends(backend, code, fake_model):
-    if backend == "plotly":
-        pytest.importorskip("plotly")
     fake_model(response(code))
     data = pd.DataFrame({"spend": [1, 2], "revenue": [4, 8], "channel": ["a", "b"]})
     viz = plot(data, backend=backend, show=False)
-    if backend == "plotly":
-        assert len(viz.figure.data) == 2
-        viz.render(title="New", figsize=(7, 4), show=False)
-        assert viz.figure.layout.width == 700
-    else:
-        assert viz.figure.axes
+    assert viz.figure.axes
 
 
 def test_cleanup_and_style_restoration(fake_model):

@@ -5,7 +5,7 @@ refine it in place, and continue with the analysis instead of stopping to write 
 code.
 
 It accepts Pandas objects, NumPy arrays, lists, and nested dictionaries. Generated plots
-use Matplotlib, Seaborn, or Plotly and include the Python source that produced them.
+use Matplotlib or Seaborn and include the Python source that produced them.
 
 ## Install
 
@@ -16,7 +16,7 @@ git clone https://github.com/egpand/augplot.git
 cd augplot
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install ".[plotly]" jupyterlab ipykernel
+python -m pip install . jupyterlab ipykernel
 python -m ipykernel install --user --name augplot --display-name "Python (Augplot)"
 ```
 
@@ -61,6 +61,9 @@ and returns its path. New function names are appended; rerunning the same functi
 updates its Augplot-generated definition. Inspect the generated source directly with
 `plt.code`.
 
+See the [API and workflow reference](docs/api.md) for every command, option, and
+inspectable attribute.
+
 `ap.load_sns_dataset()` is a thin wrapper around `seaborn.load_dataset()`, so examples do
 not need a separate Seaborn import. The first load requires internet access; Seaborn caches
 the CSV locally by default. Dataset documentation and provenance belong to the
@@ -74,7 +77,7 @@ Pass options directly to `ap.plot()`:
 ```python
 plt = ap.plot(
     data,
-    backend="seaborn",       # auto, matplotlib, seaborn, or plotly
+    backend="seaborn",       # auto, matplotlib, or seaborn
     display_format="retina", # retina, png, or svg
     show=True,
 )
@@ -102,10 +105,10 @@ rows, but names, statistics, and scalar dictionary values may still be included.
 Generated Python runs locally against a copy of the full data. The validation checks are
 not a security sandbox; review generated code before using it with sensitive data.
 
-The scope boundary is the selected visualization backend. If Matplotlib, Seaborn, or
-Plotly can compute something from the supplied data while rendering the figure, it is in
-scope. That includes aggregation, histogram bins, density estimates, regression or
-smoothing trends, descriptive error bars, and confidence intervals.
+The scope boundary is the selected visualization backend. If Matplotlib or Seaborn can
+compute something from the supplied data while rendering the figure, it is in scope. That
+includes aggregation, histogram bins, density estimates, regression or smoothing trends,
+descriptive error bars, and confidence intervals.
 
 The boundary is the figure: Augplot does not use a separate modeling system or return a
 fitted model, transformed dataset, predictions, or other analytical artifacts. Future
@@ -115,7 +118,7 @@ selected backend can visualize them.
 ## Development
 
 ```bash
-python -m pip install -e '.[dev,plotly]'
+python -m pip install -e '.[dev]'
 python -m pytest
 python -m ruff check .
 python -m build

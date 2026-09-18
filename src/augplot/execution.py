@@ -10,7 +10,6 @@ from .profiling import copy_data
 
 _BASE_IMPORTS = {"numpy", "pandas"}
 _MPL_IMPORTS = {"matplotlib.pyplot", "matplotlib.ticker", "matplotlib.dates"}
-_PLOTLY_IMPORTS = {"plotly.express", "plotly.graph_objects", "plotly.subplots"}
 _BUILTINS = {
     "abs",
     "all",
@@ -140,8 +139,6 @@ def parse_response(response: str) -> tuple[str, str]:
 
 def allowed_imports(backend):
     modules = _BASE_IMPORTS.copy()
-    if backend == "plotly":
-        return modules | _PLOTLY_IMPORTS
     modules |= _MPL_IMPORTS
     if backend in ("auto", "seaborn"):
         modules.add("seaborn")
@@ -260,12 +257,7 @@ def execute(code, data, *, backend, title=None, figsize=None):
                 stack.enter_context(sns.plotting_context("notebook"))
             exec(compile(tree, "<augplot-generated>", "exec"), namespace)
             figure = namespace["plot_data"](copy_data(data), title=title, figsize=figsize)
-            if backend == "plotly":
-                from plotly.graph_objects import Figure as PlotlyFigure
-
-                valid = isinstance(figure, PlotlyFigure) and bool(figure.data)
-            else:
-                valid = isinstance(figure, Figure) and bool(figure.axes)
+            valid = isinstance(figure, Figure) and bool(figure.axes)
             if not valid:
                 raise GenerationError(
                     "Function must return a nonempty Figure for the backend.", code=code

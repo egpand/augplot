@@ -79,22 +79,3 @@ FLIGHTS_HEATMAP = '''def plot_data(data, *, title=None, figsize=None):
     fig.tight_layout()
     return fig
 '''
-
-FLIGHTS_PLOTLY = '''def plot_data(data, *, title=None, figsize=None):
-    import plotly.graph_objects as go
-    month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    frame = data.copy()
-    frame["month"] = frame["month"].astype(str).str[:3]
-    matrix = frame.pivot(index="year", columns="month", values="passengers").reindex(
-        columns=month_order
-    )
-    fig = go.Figure(go.Heatmap(x=matrix.columns, y=matrix.index, z=matrix.to_numpy(),
-                               colorscale="Viridis", colorbar={"title": "Passengers"},
-                               hovertemplate="%{x} %{y}<br>%{z} passengers<extra></extra>"))
-    fig.update_layout(title=title or "Monthly airline passengers", xaxis_title="Month",
-                      yaxis_title="Year")
-    if figsize is not None:
-        fig.update_layout(width=figsize[0] * 100, height=figsize[1] * 100)
-    return fig
-'''

@@ -51,19 +51,18 @@ def write_python_function(
             )
     tree = ast.parse(code)
     tree.body[0].name = function_name
-    if backend != "plotly":
-        # Reproduce the runtime style contexts in standalone source, without Augplot.
-        preamble = "import matplotlib as augplot_mpl\n"
-        context = "augplot_mpl.rc_context()"
-        if backend in ("auto", "seaborn"):
-            preamble += "import seaborn as augplot_sns\n"
-            context += (
-                ", augplot_sns.axes_style('whitegrid'), augplot_sns.plotting_context('notebook')"
-            )
-        wrapper = ast.parse(preamble + f"with {context}:\n    pass\n").body
-        wrapper[-1].body = tree.body[0].body
-        tree.body[0].body = wrapper
-        ast.fix_missing_locations(tree)
+    # Reproduce the runtime style contexts in standalone source, without Augplot.
+    preamble = "import matplotlib as augplot_mpl\n"
+    context = "augplot_mpl.rc_context()"
+    if backend in ("auto", "seaborn"):
+        preamble += "import seaborn as augplot_sns\n"
+        context += (
+            ", augplot_sns.axes_style('whitegrid'), augplot_sns.plotting_context('notebook')"
+        )
+    wrapper = ast.parse(preamble + f"with {context}:\n    pass\n").body
+    wrapper[-1].body = tree.body[0].body
+    tree.body[0].body = wrapper
+    ast.fix_missing_locations(tree)
     source = ast.unparse(tree) + "\n"
     generated = _GENERATED_MARKER + "\n" + source
     if replacement is None:

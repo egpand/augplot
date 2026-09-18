@@ -18,7 +18,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-plotly = ["plotly>=5.24,<7", "nbformat>=5.10"]
 dev = ["pytest>=8,<10", "ruff>=0.9", "build>=1.2", "nbclient>=0.10", "nbformat>=5.10", "ipykernel>=6.29"]
 
 [tool.hatch.build.targets.wheel]
