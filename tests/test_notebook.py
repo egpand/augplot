@@ -20,6 +20,7 @@ def test_example_in_real_kernel_with_mocked_inference(tmp_path):
     refined = CV_HIGHLIGHT
     setup = f"""
 import os, json
+import numpy as np
 def offline_key(prompt):
     assert prompt == "OpenAI API key: "
     return "offline-test-key"
@@ -90,21 +91,22 @@ provider.complete = offline_complete
                 "forecast = next(line for line in forecast_viz.figure.axes[0].lines "
                 "if line.get_label() == 'Supplied forecast')\n"
                 "np.testing.assert_array_equal(forecast.get_xdata(), forecast_results.week)\n"
-                "np.testing.assert_allclose(forecast.get_ydata(), forecast_results.forecast)\n"
-                "assert len(forecast_viz.figure.axes[0].collections[0].get_offsets()) == 30\n"
+                "np.testing.assert_allclose(forecast.get_ydata(), "
+                "forecast_results.forecast_latency_ms)\n"
+                "assert len(forecast_viz.figure.axes[0].collections[0].get_offsets()) == 26\n"
                 "outside = next(c for c in forecast_viz.figure.axes[0].collections "
                 "if c.get_label() == 'Outside supplied interval')\n"
                 "np.testing.assert_allclose(outside.get_offsets()[:, 1], [620, 810])\n"
                 "band = next(c for c in forecast_viz.figure.axes[0].collections "
                 "if c.get_label() == 'Supplied interval (synthetic)')\n"
                 "np.testing.assert_allclose(np.unique(band.get_paths()[0].vertices[:, 1]), "
-                "np.unique(forecast_window[['lower', 'upper']].to_numpy()))\n"
+                "np.unique(forecast_results[['lower_95_ms', 'upper_95_ms']].dropna().to_numpy()))\n"
                 "changed = forecast_results.copy()\n"
-                "changed['forecast'] = changed['forecast'] + 13\n"
+                "changed['forecast_latency_ms'] = changed['forecast_latency_ms'] + 13\n"
                 "forecast_viz.render(changed, show=False)\n"
                 "shifted = next(line for line in forecast_viz.figure.axes[0].lines "
                 "if line.get_label() == 'Supplied forecast')\n"
-                "np.testing.assert_allclose(shifted.get_ydata(), changed.forecast)\n"
+                "np.testing.assert_allclose(shifted.get_ydata(), changed.forecast_latency_ms)\n"
                 f"assert offline_calls == {expected_calls}"
             )
         )

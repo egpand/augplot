@@ -1,0 +1,26 @@
+model,fold,accuracy,roc_auc
+Logistic regression,1,0.812,0.884
+Logistic regression,2,0.826,0.901
+Logistic regression,3,0.817,0.893
+Logistic regression,4,0.798,0.871
+Logistic regression,5,0.835,0.907
+Random forest,1,0.884,0.951
+Random forest,2,0.901,0.963
+Random forest,3,0.892,0.946
+Random forest,4,0.869,0.938
+Random forest,5,0.907,0.956
+Gradient boosting,1,0.921,0.947
+Gradient boosting,2,0.934,0.958
+Gradient boosting,3,0.916,0.941
+Gradient boosting,4,0.925,0.936
+Gradient boosting,5,0.931,0.954
+Extra trees,1,0.869,0.918
+Extra trees,2,0.883,0.934
+Extra trees,3,0.891,0.927
+Extra trees,4,0.876,0.909
+Extra trees,5,0.887,0.931
+Neural network,1,0.943,0.968
+Neural network,2,0.887,0.913
+Neural network,3,0.932,0.957
+Neural network,4,0.851,0.881
+Neural network,5,0.948,0.972

@@ -40,6 +40,7 @@ Then work directly with notebook data:
 ```python
 import augplot as ap
 
+training_history = ap.load_dataset("training_history")
 viz = ap.plot(training_history, prompt="Plot training and validation loss by epoch")
 viz.refine("Use a log scale and mark the epoch with the lowest validation loss")
 ```
@@ -47,12 +48,15 @@ viz.refine("Use a log scale and mark the epoch with the lowest validation loss")
 `ap.plot()` returns the visualization, so it can be reused without another model call:
 
 ```python
-viz.render(next_run_history)
+viz.render(training_history)
 viz.figure.savefig("loss.png", dpi=300)
 viz.save("plots.py", function_name="plot_training_loss")
 ```
 
 Inspect the generated source with `viz.code`.
+
+`ap.load_dataset()` includes `training_history`, `cv_results`, and `forecast_results`.
+The datasets are packaged with Augplot and load without a network connection.
 
 ## Configuration
 
