@@ -1,7 +1,14 @@
 """Notebook visualizations with inspectable, reusable Python source."""
 
 from .core import Visualizer, plot
-from .errors import ConfigurationError, DataError, GenerationError, HimaliaError, ProviderError
+from .errors import (
+    ConfigurationError,
+    DataError,
+    GenerationError,
+    HimaliaError,
+    ProviderError,
+    ScopeError,
+)
 
 __all__ = [
     "Visualizer",
@@ -11,5 +18,6 @@ __all__ = [
     "DataError",
     "GenerationError",
     "ProviderError",
+    "ScopeError",
 ]
 __version__ = "0.1.0"

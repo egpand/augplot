@@ -5,7 +5,7 @@ import builtins
 import json
 from contextlib import ExitStack
 
-from .errors import GenerationError
+from .errors import GenerationError, ScopeError
 from .profiling import copy_data
 
 _BASE_IMPORTS = {"numpy", "pandas"}
@@ -121,6 +121,13 @@ def parse_response(response: str) -> tuple[str, str]:
         result = json.loads(text)
     except (ValueError, TypeError):
         raise GenerationError("Expected a JSON object with code and explanation strings.") from None
+    if (
+        isinstance(result, dict)
+        and result.get("error") == "out_of_scope"
+        and isinstance(result.get("explanation"), str)
+        and result["explanation"].strip()
+    ):
+        raise ScopeError(result["explanation"].strip()[:1000])
     if not isinstance(result, dict) or not all(
         isinstance(result.get(field), str) and result[field].strip()
         for field in ("code", "explanation")

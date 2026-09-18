@@ -17,6 +17,10 @@ class ProviderError(HimaliaError):
     """The configured model could not be called."""
 
 
+class ScopeError(HimaliaError, ValueError):
+    """The request needs upstream modeling or prediction inputs, not plotting code."""
+
+
 class GenerationError(HimaliaError):
     """The model did not produce a valid, executable plot."""
 

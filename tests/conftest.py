@@ -5,6 +5,12 @@ import pytest
 
 matplotlib.use("Agg")
 
+
+@pytest.fixture(autouse=True)
+def isolated_working_directory(tmp_path, monkeypatch):
+    """Keep persistent plot history and exports isolated from other tests/projects."""
+    monkeypatch.chdir(tmp_path)
+
 CV_CODE = """def plot_data(data, *, title=None, figsize=None):
     import numpy as np
     import matplotlib.pyplot as plt

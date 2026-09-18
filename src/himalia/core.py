@@ -9,6 +9,7 @@ from . import provider
 from .errors import ConfigurationError, GenerationError
 from .execution import execute, parse_response
 from .exporting import save_function
+from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPT
 
@@ -26,14 +27,18 @@ class Visualizer:
         *,
         model: str | None = None,
         backend: str = "auto",
+        display_format: str = "retina",
         api_base: str | None = None,
         sample_rows: int = 5,
         max_profile_chars: int = 20_000,
         timeout: float = 60,
         max_repairs: int = 1,
+        cache_dir: str | Path | None = ".himalia/plots",
     ):
         if backend not in {"auto", "matplotlib", "seaborn", "plotly"}:
             raise ConfigurationError("backend must be auto, matplotlib, seaborn, or plotly.")
+        if display_format not in {"retina", "png", "svg"}:
+            raise ConfigurationError("display_format must be retina, png, or svg.")
         if not isinstance(sample_rows, int) or not 0 <= sample_rows <= 100:
             raise ConfigurationError("sample_rows must be an integer between 0 and 100.")
         if not isinstance(max_profile_chars, int) or not 500 <= max_profile_chars <= 100_000:
@@ -44,11 +49,18 @@ class Visualizer:
             raise ConfigurationError("timeout must be a finite positive number of seconds.")
         self.model = model
         self.backend = backend
+        self.display_format = display_format
         self.api_base = api_base
         self.sample_rows = sample_rows
         self.max_profile_chars = max_profile_chars
         self.timeout = timeout
         self.max_repairs = max_repairs
+        self._history = History(cache_dir) if cache_dir is not None else None
+        self.history_path: Path | None = None
+        self.cache_hit = False
+        self._record = None
+        self._root = None
+        self._data_fingerprint = None
         self.code: str | None = None
         self.figure = None
         self.explanation: str | None = None
@@ -124,47 +136,138 @@ class Visualizer:
             code=code,
         ) from None
 
-    @staticmethod
-    def _display(figure):
+    def _resolve(self, data, profile, prompt, *, data_hash, regenerate, refining=False):
+        """Resolve this exact step; descendants never replace their parent's lookup."""
+        model, api_base = self._configuration()
+        settings = {
+            "history_version": HISTORY_VERSION,
+            "prompt_version": PROMPT_VERSION,
+            "data": data_hash,
+            "model": model,
+            "api_base": api_base,
+            "backend": self.backend,
+            "sample_rows": self.sample_rows,
+            "max_profile_chars": self.max_profile_chars,
+            "prompt": prompt,
+        }
+        if refining:
+            settings.update(
+                parent=self._record["revision"] if self._record else None,
+                previous_code=self.code,
+                original_prompt=self._prompt,
+            )
+        key = request_key(settings)
+        root = self._root if refining else key
+        if self._history is not None and not regenerate:
+            saved = self._history.load(root, key)
+            if saved is not None:
+                record, code, path = saved
+                # Apply the same validation and defensive execution as freshly generated code.
+                code, explanation = parse_response(
+                    json.dumps({"code": code, "explanation": record["explanation"]})
+                )
+                try:
+                    figure = execute(code, data, backend=self.backend)
+                except GenerationError as exc:
+                    raise GenerationError(
+                        "Saved visualization failed; no LLM request was made. Restore the "
+                        "compatible environment or use regenerate=True explicitly. " + str(exc),
+                        code=code,
+                    ) from None
+                return code, explanation, figure, record, path, root, True
+        code, explanation, figure = self._generate(
+            data,
+            profile,
+            prompt,
+            previous_code=self.code if refining else None,
+            original_prompt=self._prompt if refining else None,
+        )
+        record, path = None, None
+        if self._history is not None:
+            record, _, path = self._history.save(
+                root,
+                key,
+                code=code,
+                explanation=explanation,
+                depth=self._record["depth"] + 1 if refining else 0,
+                parent=self._record["revision"] if refining else None,
+                data_fingerprint=data_hash,
+            )
+        return code, explanation, figure, record, path, root, False
+
+    def _accept(self, resolved):
+        (
+            self.code, self.explanation, self.figure, self._record,
+            self.history_path, self._root, self.cache_hit,
+        ) = resolved
+
+    def _display(self, figure):
+        """Render static figures explicitly, without altering notebook formatters or DPI."""
         from IPython import get_ipython
-        from IPython.display import display
+        from IPython.core.pylabtools import print_figure, retina_figure
+        from IPython.display import SVG, Image, display
+        from matplotlib.figure import Figure
 
         # Do not open browser windows or print Figure reprs from scripts.
         shell = get_ipython()
         if shell is not None and getattr(shell, "kernel", None) is not None:
-            display(figure)
+            if not isinstance(figure, Figure):
+                display(figure)
+            elif self.display_format == "retina":
+                rendered = retina_figure(figure)
+                if rendered is not None:
+                    png, dimensions = rendered
+                    display(Image(data=png, format="png", **dimensions))
+            elif self.display_format == "svg":
+                svg = print_figure(figure, fmt="svg")
+                if svg is not None:
+                    display(SVG(data=svg))
+            else:
+                png = print_figure(figure, fmt="png")
+                if png is not None:
+                    display(Image(data=png, format="png"))
 
-    def fit(self, data, prompt: str = "auto", *, show: bool = True):
-        """Generate and display a plot. Replace existing state only after success."""
+    def fit(self, data, prompt: str = "auto", *, show: bool = True, regenerate: bool = False):
+        """Reuse or generate the original plot. Replace existing state only after success."""
         self._validate_prompt(prompt)
         self._configuration()
         profile = profile_data(data, sample_rows=self.sample_rows, max_chars=self.max_profile_chars)
         snapshot = copy_data(data)
-        code, explanation, figure = self._generate(snapshot, profile, prompt)
+        data_hash = fingerprint(snapshot) if self._history is not None else None
+        resolved = self._resolve(
+            snapshot, profile, prompt, data_hash=data_hash, regenerate=regenerate
+        )
         self._data, self._prompt = snapshot, prompt
-        self.profile, self.code, self.explanation, self.figure = profile, code, explanation, figure
+        self.profile, self._data_fingerprint = profile, data_hash
+        self._accept(resolved)
         if show:
-            self._display(figure)
+            self._display(self.figure)
         return self
 
     def _require_fit(self):
         if self.code is None:
             raise ConfigurationError("Call fit(data) before refining, rendering, or saving.")
 
-    def refine(self, prompt: str, *, show: bool = True):
-        """Revise the last successful function using the original data and a new instruction."""
+    @property
+    def data_fingerprint(self):
+        """Full fitted-data hash, or None before fit / when persistence is disabled."""
+        return self._data_fingerprint
+
+    def refine(self, prompt: str, *, show: bool = True, regenerate: bool = False):
+        """Reuse or generate a revision identified by its parent and instruction."""
         self._require_fit()
         self._validate_prompt(prompt)
-        code, explanation, figure = self._generate(
+        resolved = self._resolve(
             self._data,
             self.profile,
             prompt,
-            previous_code=self.code,
-            original_prompt=self._prompt,
+            data_hash=self._data_fingerprint,
+            regenerate=regenerate,
+            refining=True,
         )
-        self.code, self.explanation, self.figure = code, explanation, figure
+        self._accept(resolved)
         if show:
-            self._display(figure)
+            self._display(self.figure)
         return self
 
     def render(self, data=None, *, title=None, figsize=None, show: bool = True):
@@ -194,6 +297,8 @@ class Visualizer:
         return f"Visualizer(backend={self.backend!r}, state={state!r})"
 
 
-def plot(data, prompt: str = "auto", *, show: bool = True, **kwargs) -> Visualizer:
+def plot(
+    data, prompt: str = "auto", *, show: bool = True, regenerate: bool = False, **kwargs
+) -> Visualizer:
     """Fit and return a Visualizer. Keyword arguments configure Visualizer()."""
-    return Visualizer(**kwargs).fit(data, prompt=prompt, show=show)
+    return Visualizer(**kwargs).fit(data, prompt=prompt, show=show, regenerate=regenerate)

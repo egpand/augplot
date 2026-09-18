@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -11,7 +12,7 @@ import pandas as pd
 import pytest
 from conftest import ARRAY_CODE, CV_CODE, DF_CODE, PLOTLY_CODE, response
 
-from himalia import ConfigurationError, GenerationError, ProviderError, Visualizer, plot
+from himalia import ConfigurationError, GenerationError, ProviderError, ScopeError, Visualizer, plot
 
 
 def test_fit_refine_and_render(cv_data, fake_model):
@@ -92,6 +93,42 @@ def test_repairs_disabled_and_provider_errors_not_repaired(fake_model):
     with pytest.raises(ProviderError):
         plot([1, 2], show=False)
     assert len(calls) == 1
+
+
+def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monkeypatch):
+    from himalia import core
+
+    def unexpected_execution(*args, **kwargs):
+        raise AssertionError("Out-of-scope requests must not execute code")
+
+    monkeypatch.setattr(core, "execute", unexpected_execution)
+    calls = fake_model(json.dumps({
+        "error": "out_of_scope",
+        "explanation": "Provide predictions from an upstream model to visualize a forecast.",
+    }))
+    with pytest.raises(ScopeError, match="upstream model"):
+        plot([1, 2], prompt="Train a model and forecast next month", show=False)
+    assert len(calls) == 1
+    assert not Path(".himalia").exists()
+
+
+@pytest.mark.parametrize("operation", ["fit", "refine"])
+def test_scope_refusal_preserves_previous_visualization(fake_model, operation):
+    calls = fake_model(response(ARRAY_CODE), json.dumps({
+        "error": "out_of_scope",
+        "explanation": "Supply the prediction intervals; Himalia does not estimate them.",
+    }))
+    viz = plot([1, 2], show=False)
+    previous = (viz.code, viz.figure, viz.history_path)
+    saved_files = set(Path(".himalia").rglob("*"))
+    with pytest.raises(ScopeError, match="prediction intervals"):
+        if operation == "fit":
+            viz.fit([3, 4], prompt="Estimate prediction intervals", show=False)
+        else:
+            viz.refine("Estimate prediction intervals", show=False)
+    assert (viz.code, viz.figure, viz.history_path) == previous
+    assert set(Path(".himalia").rglob("*")) == saved_files
+    assert len(calls) == 2
 
 
 def test_payload_contains_profile_not_full_data(fake_model):
