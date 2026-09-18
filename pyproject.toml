@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "himalia"
+name = "augplot"
 version = "0.1.0"
 description = "Turn notebook data into visualizations and reusable Python with an LLM."
 readme = "README.md"
@@ -22,7 +22,7 @@ plotly = ["plotly>=5.24,<7", "nbformat>=5.10"]
 dev = ["pytest>=8,<10", "ruff>=0.9", "build>=1.2", "nbclient>=0.10", "nbformat>=5.10", "ipykernel>=6.29"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/himalia"]
+packages = ["src/augplot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

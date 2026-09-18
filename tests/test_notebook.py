@@ -27,7 +27,7 @@ get_ipython().kernel.getpass = offline_key
 get_ipython().run_line_magic("matplotlib", "inline")
 from matplotlib_inline.config import InlineBackend
 InlineBackend.instance().figure_formats = {{"svg"}}
-from himalia import provider
+from augplot import provider
 responses = iter({[CV_BARS, refined, ORDERS_DOTS, ORDERS_FORECAST, ORDERS_PLOTLY]!r})
 offline_calls = 0
 def offline_complete(**kwargs):
@@ -40,14 +40,14 @@ provider.complete = offline_complete
     for cell in notebook.cells:
         if cell.cell_type == "code":
             cell.source = cell.source.replace("RUN_PLOTLY = False", "RUN_PLOTLY = True")
-            if cell.id == "himalia-02":
+            if cell.id == "augplot-02":
                 cell.source += (
-                    '\nassert os.environ["HIMALIA_MODEL"] == "openai/gpt-5.6-terra"\n'
+                    '\nassert os.environ["AUGPLOT_MODEL"] == "openai/gpt-5.6-terra"\n'
                     'assert os.environ["OPENAI_API_KEY"] == "offline-test-key"'
                 )
-            if cell.id in {"himalia-07", "himalia-10"}:
+            if cell.id in {"augplot-07", "augplot-10"}:
                 # Winners must be computed from the full data, including on local render.
-                accuracy_winner = 2 if cell.id == "himalia-07" else 4
+                accuracy_winner = 2 if cell.id == "augplot-07" else 4
                 cell.source += (
                     "\nassert [i for i, bar in enumerate(viz.figure.axes[0].patches) "
                     f"if bar.get_hatch()] == [{accuracy_winner}, 6]"
@@ -58,13 +58,13 @@ provider.complete = offline_complete
 
     # Use this test environment's Python, never a user's default notebook kernel.
     kernel_root = tmp_path / "kernels"
-    kernel_path = kernel_root / "himalia-test"
+    kernel_path = kernel_root / "augplot-test"
     kernel_path.mkdir(parents=True)
     (kernel_path / "kernel.json").write_text(
         json.dumps(
             {
                 "argv": [sys.executable, "-m", "ipykernel_launcher", "-f", "{connection_file}"],
-                "display_name": "Himalia tests",
+                "display_name": "Augplot tests",
                 "language": "python",
                 "env": {
                     "IPYTHONDIR": str(tmp_path / "ipython"),
@@ -76,7 +76,7 @@ provider.complete = offline_complete
     # The second pass starts a fresh kernel and must replay all steps from disk.
     for expected_calls in (5, 0):
         manager = KernelManager(
-            kernel_name="himalia-test",
+            kernel_name="augplot-test",
             kernel_spec_manager=KernelSpecManager(kernel_dirs=[str(kernel_root)]),
             connection_file=str(tmp_path / "connection.json"),
         )
@@ -122,7 +122,7 @@ provider.complete = offline_complete
             continue
         assert not any(output.output_type == "error" for output in cell.outputs)
         if cell.id in {
-            "himalia-04", "himalia-07", "himalia-10", "himalia-14", "himalia-forecast"
+            "augplot-04", "augplot-07", "augplot-10", "augplot-14", "augplot-forecast"
         }:
             images = [output for output in cell.outputs if "image/png" in output.get("data", {})]
             assert len(images) == 1, f"Expected exactly one inline chart: {cell.source}"

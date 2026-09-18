@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from himalia import ProviderError
-from himalia.provider import complete
+from augplot import ProviderError
+from augplot.provider import complete
 
 
 def test_adapter_disables_retries_and_passes_configuration(monkeypatch):

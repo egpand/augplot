@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from himalia import DataError
-from himalia.profiling import copy_data, profile_data
+from augplot import DataError
+from augplot.profiling import copy_data, profile_data
 
 
 @pytest.mark.parametrize(

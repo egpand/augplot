@@ -33,7 +33,7 @@ class Visualizer:
         max_profile_chars: int = 20_000,
         timeout: float = 60,
         max_repairs: int = 1,
-        cache_dir: str | Path | None = ".himalia/plots",
+        cache_dir: str | Path | None = ".augplot/plots",
     ):
         if backend not in {"auto", "matplotlib", "seaborn", "plotly"}:
             raise ConfigurationError("backend must be auto, matplotlib, seaborn, or plotly.")
@@ -69,15 +69,15 @@ class Visualizer:
         self._prompt = "auto"
 
     def _configuration(self):
-        model = self.model if self.model is not None else os.getenv("HIMALIA_MODEL")
+        model = self.model if self.model is not None else os.getenv("AUGPLOT_MODEL")
         if not isinstance(model, str) or not model.strip():
-            raise ConfigurationError("Set HIMALIA_MODEL or pass model='provider/model-name'.")
+            raise ConfigurationError("Set AUGPLOT_MODEL or pass model='provider/model-name'.")
         if self.backend == "plotly" and (
             importlib.util.find_spec("plotly") is None
             or importlib.util.find_spec("nbformat") is None
         ):
-            raise ConfigurationError("Install Plotly support with pip install 'himalia[plotly]'.")
-        api_base = self.api_base if self.api_base is not None else os.getenv("HIMALIA_API_BASE")
+            raise ConfigurationError("Install Plotly support with pip install 'augplot[plotly]'.")
+        api_base = self.api_base if self.api_base is not None else os.getenv("AUGPLOT_API_BASE")
         return model, api_base
 
     @staticmethod

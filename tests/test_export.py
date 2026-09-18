@@ -6,10 +6,10 @@ import sys
 import pytest
 from conftest import CV_CODE, response
 
-from himalia import plot
+from augplot import plot
 
 
-def test_export_runs_without_himalia_or_credentials(tmp_path, cv_data, fake_model, capsys):
+def test_export_runs_without_augplot_or_credentials(tmp_path, cv_data, fake_model, capsys):
     calls = fake_model(response(CV_CODE))
     viz = plot(cv_data, show=False)
     path = viz.save(tmp_path / "vis_utils.py", function_name="plot_cv_results")
@@ -18,15 +18,15 @@ def test_export_runs_without_himalia_or_credentials(tmp_path, cv_data, fake_mode
     env = {
         key: value
         for key, value in os.environ.items()
-        if not key.endswith("API_KEY") and not key.startswith("HIMALIA_")
+        if not key.endswith("API_KEY") and not key.startswith("AUGPLOT_")
     }
     script = """
 import sys
-class BlockHimalia:
+class BlockAugplot:
     def find_spec(self, fullname, *args):
-        if fullname == "himalia" or fullname.startswith("himalia."):
-            raise ImportError("Himalia is unavailable")
-sys.meta_path.insert(0, BlockHimalia())
+        if fullname == "augplot" or fullname.startswith("augplot."):
+            raise ImportError("Augplot is unavailable")
+sys.meta_path.insert(0, BlockAugplot())
 import matplotlib
 matplotlib.use("Agg")
 from vis_utils import plot_cv_results
@@ -35,7 +35,7 @@ assert len(fig.axes[0].patches) == 1
 assert abs(fig.axes[0].patches[0].get_height() - 0.3) < 1e-8
 assert fig.axes[0].get_title() == "New data"
 assert any(line.get_visible() for line in fig.axes[0].get_ygridlines())
-assert "himalia" not in sys.modules
+assert "augplot" not in sys.modules
 """
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True

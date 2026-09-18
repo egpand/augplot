@@ -4,7 +4,7 @@ from .errors import ProviderError
 
 
 def complete(*, model: str, messages: list[dict], api_base: str | None, timeout: float) -> str:
-    # Importing himalia must never initialize an SDK or contact a provider.
+    # Importing augplot must never initialize an SDK or contact a provider.
     import litellm
 
     try:

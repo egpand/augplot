@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 from conftest import ARRAY_CODE, CV_CODE, response
 
-from himalia import ConfigurationError, GenerationError, plot
-from himalia.history import fingerprint
+from augplot import ConfigurationError, GenerationError, plot
+from augplot.history import fingerprint
 
 
 def test_original_and_refinement_chain_replay_in_fresh_process(cv_data, fake_model):
@@ -32,7 +32,7 @@ def test_original_and_refinement_chain_replay_in_fresh_process(cv_data, fake_mod
     assert original.read_text() == CV_CODE
 
     script = f'''
-from himalia import plot, provider
+from augplot import plot, provider
 def forbidden(**kwargs):
     raise AssertionError("Replay must never call a provider")
 provider.complete = forbidden
@@ -109,11 +109,11 @@ def test_unsampled_data_changes_miss_cache(fake_model):
 def test_display_settings_and_render_do_not_generate_versions(fake_model):
     calls = fake_model(response(ARRAY_CODE))
     viz = plot([1, 2], show=False)
-    files = set(Path(".himalia").rglob("*"))
+    files = set(Path(".augplot").rglob("*"))
     viz.render([3, 4], show=False)
     replay = plot([1, 2], display_format="svg", timeout=90, show=False)
     assert replay.cache_hit
-    assert files == set(Path(".himalia").rglob("*"))
+    assert files == set(Path(".augplot").rglob("*"))
     assert len(calls) == 1
 
 
@@ -168,7 +168,7 @@ def test_cached_execution_failure_does_not_call_model(fake_model, monkeypatch):
     def broken(*args, **kwargs):
         raise GenerationError("Execution failed")
 
-    monkeypatch.setattr("himalia.core.execute", broken)
+    monkeypatch.setattr("augplot.core.execute", broken)
     with pytest.raises(GenerationError, match="no LLM request"):
         plot([1, 2], show=False)
     assert len(calls) == 1
@@ -180,7 +180,7 @@ def test_cache_can_be_disabled_or_relocated(fake_model, tmp_path):
         viz = plot([1, 2], cache_dir=None, show=False)
         assert viz.history_path is None
     viz.refine("Change", show=False)
-    assert not Path(".himalia").exists()
+    assert not Path(".augplot").exists()
     viz = plot([1, 2], cache_dir=tmp_path / "custom", show=False)
     assert viz.history_path.is_relative_to(tmp_path / "custom")
     assert len(calls) == 4

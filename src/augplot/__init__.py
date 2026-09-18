@@ -5,7 +5,7 @@ from .errors import (
     ConfigurationError,
     DataError,
     GenerationError,
-    HimaliaError,
+    AugplotError,
     ProviderError,
     ScopeError,
 )
@@ -13,7 +13,7 @@ from .errors import (
 __all__ = [
     "Visualizer",
     "plot",
-    "HimaliaError",
+    "AugplotError",
     "ConfigurationError",
     "DataError",
     "GenerationError",

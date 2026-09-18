@@ -1,8 +1,8 @@
 import pytest
 from conftest import ARRAY_CODE, response
 
-from himalia import GenerationError
-from himalia.execution import parse_response, validate_code
+from augplot import GenerationError
+from augplot.execution import parse_response, validate_code
 
 
 @pytest.mark.parametrize(

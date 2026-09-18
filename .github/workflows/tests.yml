@@ -18,7 +18,7 @@ jobs:
           MPLBACKEND: Agg
       - run: python -m build
       - run: |
-          python -m venv /tmp/himalia-wheel
-          /tmp/himalia-wheel/bin/pip install dist/*.whl
+          python -m venv /tmp/augplot-wheel
+          /tmp/augplot-wheel/bin/pip install dist/*.whl
           cd /tmp
-          /tmp/himalia-wheel/bin/python -c "from himalia import Visualizer; print(Visualizer())"
+          /tmp/augplot-wheel/bin/python -c "from augplot import Visualizer; print(Visualizer())"

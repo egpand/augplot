@@ -258,7 +258,7 @@ def execute(code, data, *, backend, title=None, figsize=None):
 
                 stack.enter_context(sns.axes_style("whitegrid"))
                 stack.enter_context(sns.plotting_context("notebook"))
-            exec(compile(tree, "<himalia-generated>", "exec"), namespace)
+            exec(compile(tree, "<augplot-generated>", "exec"), namespace)
             figure = namespace["plot_data"](copy_data(data), title=title, figsize=figsize)
             if backend == "plotly":
                 from plotly.graph_objects import Figure as PlotlyFigure
@@ -278,7 +278,7 @@ def execute(code, data, *, backend, title=None, figsize=None):
         trace = exc.__traceback__
         line = None
         while trace is not None:
-            if trace.tb_frame.f_code.co_filename == "<himalia-generated>":
+            if trace.tb_frame.f_code.co_filename == "<augplot-generated>":
                 line = trace.tb_lineno
             trace = trace.tb_next
         location = f" at generated line {line}" if line is not None else ""

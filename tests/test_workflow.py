@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from conftest import ARRAY_CODE, CV_CODE, DF_CODE, PLOTLY_CODE, response
 
-from himalia import ConfigurationError, GenerationError, ProviderError, ScopeError, Visualizer, plot
+from augplot import ConfigurationError, GenerationError, ProviderError, ScopeError, Visualizer, plot
 
 
 def test_fit_refine_and_render(cv_data, fake_model):
@@ -96,7 +96,7 @@ def test_repairs_disabled_and_provider_errors_not_repaired(fake_model):
 
 
 def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monkeypatch):
-    from himalia import core
+    from augplot import core
 
     def unexpected_execution(*args, **kwargs):
         raise AssertionError("Out-of-scope requests must not execute code")
@@ -109,25 +109,25 @@ def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monk
     with pytest.raises(ScopeError, match="upstream model"):
         plot([1, 2], prompt="Train a model and forecast next month", show=False)
     assert len(calls) == 1
-    assert not Path(".himalia").exists()
+    assert not Path(".augplot").exists()
 
 
 @pytest.mark.parametrize("operation", ["fit", "refine"])
 def test_scope_refusal_preserves_previous_visualization(fake_model, operation):
     calls = fake_model(response(ARRAY_CODE), json.dumps({
         "error": "out_of_scope",
-        "explanation": "Supply the prediction intervals; Himalia does not estimate them.",
+        "explanation": "Supply the prediction intervals; Augplot does not estimate them.",
     }))
     viz = plot([1, 2], show=False)
     previous = (viz.code, viz.figure, viz.history_path)
-    saved_files = set(Path(".himalia").rglob("*"))
+    saved_files = set(Path(".augplot").rglob("*"))
     with pytest.raises(ScopeError, match="prediction intervals"):
         if operation == "fit":
             viz.fit([3, 4], prompt="Estimate prediction intervals", show=False)
         else:
             viz.refine("Estimate prediction intervals", show=False)
     assert (viz.code, viz.figure, viz.history_path) == previous
-    assert set(Path(".himalia").rglob("*")) == saved_files
+    assert set(Path(".augplot").rglob("*")) == saved_files
     assert len(calls) == 2
 
 
@@ -141,9 +141,9 @@ def test_payload_contains_profile_not_full_data(fake_model):
 
 def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypatch):
     calls = fake_model(response(ARRAY_CODE), response(ARRAY_CODE))
-    monkeypatch.setenv("HIMALIA_API_BASE", "https://environment.example")
+    monkeypatch.setenv("AUGPLOT_API_BASE", "https://environment.example")
     viz = Visualizer()
-    monkeypatch.setenv("HIMALIA_MODEL", "new/model")
+    monkeypatch.setenv("AUGPLOT_MODEL", "new/model")
     viz.fit([1, 2], show=False)
     assert calls[0]["model"] == "new/model"
     assert calls[0]["api_base"] == "https://environment.example"
@@ -154,9 +154,9 @@ def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypa
 
 
 def test_missing_model_and_unfitted_operations(monkeypatch):
-    monkeypatch.delenv("HIMALIA_MODEL", raising=False)
+    monkeypatch.delenv("AUGPLOT_MODEL", raising=False)
     viz = Visualizer()
-    with pytest.raises(ConfigurationError, match="HIMALIA_MODEL"):
+    with pytest.raises(ConfigurationError, match="AUGPLOT_MODEL"):
         viz.fit([1, 2])
     for operation in (lambda: viz.refine("change"), viz.render, viz.save):
         with pytest.raises(ConfigurationError, match="fit"):
@@ -224,10 +224,10 @@ def test_import_without_credentials_does_not_import_sdk():
     env = {
         key: value
         for key, value in os.environ.items()
-        if not key.endswith("API_KEY") and key != "HIMALIA_MODEL"
+        if not key.endswith("API_KEY") and key != "AUGPLOT_MODEL"
     }
     result = subprocess.run(
-        [sys.executable, "-c", "import sys, himalia; assert 'litellm' not in sys.modules"],
+        [sys.executable, "-c", "import sys, augplot; assert 'litellm' not in sys.modules"],
         env=env,
         capture_output=True,
         text=True,

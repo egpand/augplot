@@ -63,7 +63,7 @@ def cv_data():
 
 @pytest.fixture
 def fake_model(monkeypatch):
-    from himalia import provider
+    from augplot import provider
 
     calls = []
 
@@ -78,7 +78,7 @@ def fake_model(monkeypatch):
             return result
 
         monkeypatch.setattr(provider, "complete", complete)
-        monkeypatch.setenv("HIMALIA_MODEL", "test/fake-model")
+        monkeypatch.setenv("AUGPLOT_MODEL", "test/fake-model")
         return calls
 
     return install

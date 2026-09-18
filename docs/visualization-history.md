@@ -4,7 +4,7 @@ Each `Visualizer` tracks its current version. Saved history is shared across ins
 and kernel restarts. Python variable names don't identify saved plots.
 
 ```python
-from himalia import plot
+from augplot import plot
 
 campaign_viz = plot(data)                  # original A
 campaign_viz.refine("Horizontal bars")     # A → B
@@ -39,7 +39,7 @@ exact parent version and instruction.
 Inspect `viz.history_path`, `viz.data_fingerprint`, and `viz.cache_hit` for the current
 source file, fitted-data hash, and whether the last fit/refine reused saved code.
 
-**Keep `.himalia/` alongside your notebook.** History defaults to `.himalia/plots/`
+**Keep `.augplot/` alongside your notebook.** History defaults to `.augplot/plots/`
 relative to the kernel's working directory; saving the `.ipynb` alone doesn't include it.
 Use `cache_dir=` for a consistent location or `cache_dir=None` to disable persistence.
 Replay needs the same model configuration but no API key. It preserves code;

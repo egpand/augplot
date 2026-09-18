@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import pytest
 from PIL import Image as PillowImage
 
-from himalia import ConfigurationError, Visualizer
+from augplot import ConfigurationError, Visualizer
 
 
 @pytest.fixture

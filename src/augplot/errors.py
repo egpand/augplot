@@ -1,27 +1,27 @@
 """Public exceptions. Provider/runtime diagnostics never include raw data or credentials."""
 
 
-class HimaliaError(Exception):
-    """Base class for Himalia errors."""
+class AugplotError(Exception):
+    """Base class for Augplot errors."""
 
 
-class ConfigurationError(HimaliaError, ValueError):
+class ConfigurationError(AugplotError, ValueError):
     """Missing or invalid configuration."""
 
 
-class DataError(HimaliaError, ValueError):
+class DataError(AugplotError, ValueError):
     """Unsupported or unusable input data."""
 
 
-class ProviderError(HimaliaError):
+class ProviderError(AugplotError):
     """The configured model could not be called."""
 
 
-class ScopeError(HimaliaError, ValueError):
+class ScopeError(AugplotError, ValueError):
     """The request needs upstream modeling or prediction inputs, not plotting code."""
 
 
-class GenerationError(HimaliaError):
+class GenerationError(AugplotError):
     """The model did not produce a valid, executable plot."""
 
     def __init__(self, message: str, *, code: str | None = None):
