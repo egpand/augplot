@@ -42,7 +42,10 @@ import augplot as ap
 
 penguins = ap.load_sns_dataset("penguins")
 plt = ap.plot(penguins, prompt="Compare bill length and depth across penguin species")
-plt.refine("Use one panel per species, add a linear trend, and keep sex visible")
+plt.refine(
+    "Use one panel per species, add a Seaborn regression trend as a visual summary, "
+    "and keep sex visible"
+)
 ```
 
 `ap.plot()` returns the visualization, so it can be reused without another model call:
@@ -105,6 +108,16 @@ rows, but names, statistics, and scalar dictionary values may still be included.
 
 Generated Python runs locally against a copy of the full data. The validation checks are
 not a security sandbox; review generated code before using it with sensitive data.
+
+The scope boundary is the selected visualization backend. If Matplotlib, Seaborn, or
+Plotly can compute something from the supplied data while rendering the figure, it is in
+scope. That includes aggregation, histogram bins, density estimates, regression or
+smoothing trends, descriptive error bars, and confidence intervals.
+
+The boundary is the figure: Augplot does not use a separate modeling system or return a
+fitted model, transformed dataset, predictions, or other analytical artifacts. Future
+predictions, forecasts, and their intervals must be supplied upstream, although the
+selected backend can visualize them.
 
 ## Development
 

@@ -12,3 +12,4 @@ build/
 !.env.example
 vis_utils.py
 examples/vis_utils.py
+examples/.augplot
