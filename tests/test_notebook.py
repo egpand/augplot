@@ -9,7 +9,13 @@ import nbformat
 from jupyter_client import KernelManager
 from jupyter_client.kernelspec import KernelSpecManager
 from nbclient import NotebookClient
-from notebook_charts import CV_BARS, CV_HIGHLIGHT, LATENCY_DOTS, LATENCY_FORECAST, LATENCY_PLOTLY
+from notebook_charts import (
+    FLIGHTS_HEATMAP,
+    FLIGHTS_LINES,
+    FLIGHTS_PLOTLY,
+    PENGUIN_FACETS,
+    PENGUIN_SCATTER,
+)
 
 
 def test_example_in_real_kernel_with_mocked_inference(tmp_path):
@@ -17,10 +23,11 @@ def test_example_in_real_kernel_with_mocked_inference(tmp_path):
     notebook = nbformat.read(
         Path(__file__).parents[1] / "examples" / "quickstart.ipynb", as_version=4
     )
-    refined = CV_HIGHLIGHT
+    refined = PENGUIN_FACETS
     setup = f"""
 import os, json
 import numpy as np
+import pandas as pd
 def offline_key(prompt):
     assert prompt == "OpenAI API key: "
     return "offline-test-key"
@@ -29,7 +36,34 @@ get_ipython().run_line_magic("matplotlib", "inline")
 from matplotlib_inline.config import InlineBackend
 InlineBackend.instance().figure_formats = {{"svg"}}
 from augplot import provider
-responses = iter({[CV_BARS, refined, LATENCY_DOTS, LATENCY_FORECAST, LATENCY_PLOTLY]!r})
+from augplot import datasets
+penguin_rows = []
+for species, island, base_length, base_depth in [
+    ("Adelie", "Biscoe", 38, 18),
+    ("Gentoo", "Biscoe", 48, 15),
+    ("Chinstrap", "Dream", 47, 18),
+]:
+    for offset, sex in enumerate(["Female", "Male", "Female", "Male"]):
+        penguin_rows.append({{
+            "species": species, "island": island, "bill_length_mm": base_length + offset,
+            "bill_depth_mm": base_depth + offset / 4, "flipper_length_mm": 190 + offset,
+            "body_mass_g": 3500 + offset * 100, "sex": sex,
+        }})
+penguin_fixture = pd.DataFrame(penguin_rows)
+months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+flight_fixture = pd.DataFrame([
+    {{"year": year, "month": month, "passengers": 100 + (year - 1949) * 20 + i * 5}}
+    for year in range(1949, 1961) for i, month in enumerate(months)
+])
+def offline_dataset(name, **kwargs):
+    if name == "penguins":
+        return penguin_fixture.copy()
+    if name == "flights":
+        return flight_fixture.copy()
+    raise AssertionError(name)
+datasets.sns.load_dataset = offline_dataset
+responses = iter({[PENGUIN_SCATTER, refined, FLIGHTS_LINES, FLIGHTS_HEATMAP, FLIGHTS_PLOTLY]!r})
 offline_calls = 0
 def offline_complete(**kwargs):
     global offline_calls
@@ -46,13 +80,8 @@ provider.complete = offline_complete
                     '\nassert os.environ["AUGPLOT_MODEL"] == "openai/gpt-5.6-terra"\n'
                     'assert os.environ["OPENAI_API_KEY"] == "offline-test-key"'
                 )
-            if cell.id in {"augplot-07", "augplot-10"}:
-                # Winners must be computed from the full data, including on local render.
-                accuracy_winner = 2 if cell.id == "augplot-07" else 4
-                cell.source += (
-                    "\nassert [i for i, bar in enumerate(plt.figure.axes[0].patches) "
-                    f"if bar.get_hatch()] == [{accuracy_winner}, 6]"
-                )
+            if cell.id == "augplot-10":
+                cell.source += "\nassert set(biscoe_penguins['island']) == {'Biscoe'}"
     notebook.cells.append(
         nbformat.v4.new_code_cell("assert InlineBackend.instance().figure_formats == {'svg'}")
     )
@@ -86,27 +115,15 @@ provider.complete = offline_complete
             nbformat.v4.new_code_cell(
                 f"assert offline_calls == {expected_calls}\n"
                 f"assert plt.code == {refined!r}\n"
-                f"assert forecast_viz.cache_hit is {expected_calls == 0}\n"
-                f"assert forecast_viz.code == {LATENCY_FORECAST!r}\n"
-                "forecast = next(line for line in forecast_viz.figure.axes[0].lines "
-                "if line.get_label() == 'Supplied forecast')\n"
-                "np.testing.assert_array_equal(forecast.get_xdata(), forecast_results.week)\n"
-                "np.testing.assert_allclose(forecast.get_ydata(), "
-                "forecast_results.forecast_latency_ms)\n"
-                "assert len(forecast_viz.figure.axes[0].collections[0].get_offsets()) == 26\n"
-                "outside = next(c for c in forecast_viz.figure.axes[0].collections "
-                "if c.get_label() == 'Outside supplied interval')\n"
-                "np.testing.assert_allclose(outside.get_offsets()[:, 1], [620, 810])\n"
-                "band = next(c for c in forecast_viz.figure.axes[0].collections "
-                "if c.get_label() == 'Supplied interval (synthetic)')\n"
-                "np.testing.assert_allclose(np.unique(band.get_paths()[0].vertices[:, 1]), "
-                "np.unique(forecast_results[['lower_95_ms', 'upper_95_ms']].dropna().to_numpy()))\n"
-                "changed = forecast_results.copy()\n"
-                "changed['forecast_latency_ms'] = changed['forecast_latency_ms'] + 13\n"
-                "forecast_viz.render(changed, show=False)\n"
-                "shifted = next(line for line in forecast_viz.figure.axes[0].lines "
-                "if line.get_label() == 'Supplied forecast')\n"
-                "np.testing.assert_allclose(shifted.get_ydata(), changed.forecast_latency_ms)\n"
+                f"assert flight_viz.cache_hit is {expected_calls == 0}\n"
+                f"assert flight_viz.code == {FLIGHTS_HEATMAP!r}\n"
+                "assert flights.shape == (144, 3)\n"
+                "assert len(flight_viz.figure.axes[0].texts) == 144\n"
+                "assert len(flight_viz.figure.axes[0].patches) == 1\n"
+                "assert len(plt.figure.axes) == 2\n"
+                "assert set(biscoe_penguins['species']) == {'Adelie', 'Gentoo'}\n"
+                "plt.render(biscoe_penguins, show=False)\n"
+                "assert len(plt.figure.axes) == 2\n"
                 f"assert offline_calls == {expected_calls}"
             )
         )
@@ -141,4 +158,6 @@ provider.complete = offline_complete
                 if "application/vnd.plotly.v1+json" in output.get("data", {})
             ]
             assert len(figures) == 1
-    assert (tmp_path / "vis_utils.py").exists()
+    exported = tmp_path / "vis_utils.py"
+    assert exported.exists()
+    assert "def plot_penguin_bills" in exported.read_text()

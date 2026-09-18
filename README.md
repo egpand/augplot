@@ -40,23 +40,36 @@ Then work directly with notebook data:
 ```python
 import augplot as ap
 
-training_history = ap.load_dataset("training_history")
-plt = ap.plot(training_history, prompt="Plot training and validation loss by epoch")
-plt.refine("Use a log scale and mark the epoch with the lowest validation loss")
+penguins = ap.load_sns_dataset("penguins")
+plt = ap.plot(penguins, prompt="Compare bill length and depth across penguin species")
+plt.refine("Use one panel per species, add a linear trend, and keep sex visible")
 ```
 
 `ap.plot()` returns the visualization, so it can be reused without another model call:
 
 ```python
-plt.render(training_history)
-plt.figure.savefig("loss.png", dpi=300)
-plt.save("plots.py", function_name="plot_training_loss")
+plt.render(penguins[penguins["island"] == "Biscoe"])
+plt.figure.savefig("penguin_bills.png", dpi=300)
+plt.save("plots.py", function_name="plot_penguin_bills")
 ```
 
 Inspect the generated source with `plt.code`.
 
-`ap.load_dataset()` includes `training_history`, `cv_results`, and `forecast_results`.
-The datasets are packaged with Augplot and load without a network connection.
+`ap.load_sns_dataset()` is a thin wrapper around `seaborn.load_dataset()`, so examples do
+not need a separate Seaborn import. The first load requires internet access; Seaborn caches
+the CSV locally by default. These datasets are intended for examples, not production data.
+
+The 22 currently supported datasets cover these useful demo shapes:
+
+| Shape | Datasets | Good for |
+| --- | --- | --- |
+| Small experiments | `anagrams`, `attention`, `exercise` | grouped comparisons and repeated measures |
+| Statistical classics | `anscombe`, `iris`, `penguins`, `geyser`, `tips` | relationships, distributions, facets, and regression |
+| Time series | `dowjones`, `flights`, `fmri`, `seaice` | trends, ordered categories, uncertainty, and heatmaps |
+| Larger tabular data | `diamonds`, `mpg`, `taxis`, `titanic` | multivariate comparisons and aggregation |
+| Domain data | `brain_networks`, `car_crashes`, `glue`, `healthexp`, `planets`, `dots` | wide data, rankings, panels, and scientific measurements |
+
+The exact names are also available as `ap.SNS_DATASETS`.
 
 ## Configuration
 

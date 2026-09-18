@@ -1,23 +1,51 @@
-"""Small offline datasets used by the documentation and examples."""
+"""Convenient access to Seaborn's online example datasets."""
 
-from importlib.resources import files
+from typing import Any
 
 import pandas as pd
+import seaborn as sns
 
-_DATASETS = ("cv_results", "forecast_results", "training_history")
+SNS_DATASETS = (
+    "anagrams",
+    "anscombe",
+    "attention",
+    "brain_networks",
+    "car_crashes",
+    "diamonds",
+    "dots",
+    "dowjones",
+    "exercise",
+    "flights",
+    "fmri",
+    "geyser",
+    "glue",
+    "healthexp",
+    "iris",
+    "mpg",
+    "penguins",
+    "planets",
+    "seaice",
+    "taxis",
+    "tips",
+    "titanic",
+)
 
 
-def load_dataset(name: str) -> pd.DataFrame:
-    """Return a fresh DataFrame for one of Augplot's bundled example datasets."""
-    if name not in _DATASETS:
-        available = ", ".join(_DATASETS)
-        raise ValueError(f"Unknown dataset {name!r}. Available datasets: {available}.")
+def load_sns_dataset(
+    name: str,
+    *,
+    cache: bool = True,
+    data_home: str | None = None,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """Load one of Seaborn's example datasets without importing Seaborn yourself.
 
-    resource = files("augplot").joinpath("data", f"{name}.csv")
-    with resource.open("rb") as handle:
-        frame = pd.read_csv(handle)
+    The first load may download the dataset from Seaborn's public data repository.
+    Seaborn caches downloads locally by default. Extra keyword arguments are passed
+    to :func:`seaborn.load_dataset` and then to ``pandas.read_csv``.
+    """
+    if name not in SNS_DATASETS:
+        available = ", ".join(SNS_DATASETS)
+        raise ValueError(f"Unknown Seaborn dataset {name!r}. Available datasets: {available}.")
 
-    for column in frame.columns:
-        if any(token in column.lower() for token in ("date", "datetime", "timestamp", "week")):
-            frame[column] = pd.to_datetime(frame[column])
-    return frame
+    return sns.load_dataset(name, cache=cache, data_home=data_home, **kwargs)
