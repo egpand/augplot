@@ -9,7 +9,7 @@ import nbformat
 from jupyter_client import KernelManager
 from jupyter_client.kernelspec import KernelSpecManager
 from nbclient import NotebookClient
-from notebook_charts import CV_BARS, CV_HIGHLIGHT, ORDERS_DOTS, ORDERS_FORECAST, ORDERS_PLOTLY
+from notebook_charts import CV_BARS, CV_HIGHLIGHT, LATENCY_DOTS, LATENCY_FORECAST, LATENCY_PLOTLY
 
 
 def test_example_in_real_kernel_with_mocked_inference(tmp_path):
@@ -28,7 +28,7 @@ get_ipython().run_line_magic("matplotlib", "inline")
 from matplotlib_inline.config import InlineBackend
 InlineBackend.instance().figure_formats = {{"svg"}}
 from augplot import provider
-responses = iter({[CV_BARS, refined, ORDERS_DOTS, ORDERS_FORECAST, ORDERS_PLOTLY]!r})
+responses = iter({[CV_BARS, refined, LATENCY_DOTS, LATENCY_FORECAST, LATENCY_PLOTLY]!r})
 offline_calls = 0
 def offline_complete(**kwargs):
     global offline_calls
@@ -85,24 +85,24 @@ provider.complete = offline_complete
             nbformat.v4.new_code_cell(
                 f"assert offline_calls == {expected_calls}\n"
                 f"assert viz.code == {refined!r}\n"
-                f"assert orders_viz.cache_hit is {expected_calls == 0}\n"
-                f"assert orders_viz.code == {ORDERS_FORECAST!r}\n"
-                "forecast = next(line for line in orders_viz.figure.axes[0].lines "
+                f"assert forecast_viz.cache_hit is {expected_calls == 0}\n"
+                f"assert forecast_viz.code == {LATENCY_FORECAST!r}\n"
+                "forecast = next(line for line in forecast_viz.figure.axes[0].lines "
                 "if line.get_label() == 'Supplied forecast')\n"
                 "np.testing.assert_array_equal(forecast.get_xdata(), forecast_results.week)\n"
                 "np.testing.assert_allclose(forecast.get_ydata(), forecast_results.forecast)\n"
-                "assert len(orders_viz.figure.axes[0].collections[0].get_offsets()) == 30\n"
-                "outside = next(c for c in orders_viz.figure.axes[0].collections "
+                "assert len(forecast_viz.figure.axes[0].collections[0].get_offsets()) == 30\n"
+                "outside = next(c for c in forecast_viz.figure.axes[0].collections "
                 "if c.get_label() == 'Outside supplied interval')\n"
                 "np.testing.assert_allclose(outside.get_offsets()[:, 1], [620, 810])\n"
-                "band = next(c for c in orders_viz.figure.axes[0].collections "
+                "band = next(c for c in forecast_viz.figure.axes[0].collections "
                 "if c.get_label() == 'Supplied interval (synthetic)')\n"
                 "np.testing.assert_allclose(np.unique(band.get_paths()[0].vertices[:, 1]), "
                 "np.unique(forecast_window[['lower', 'upper']].to_numpy()))\n"
                 "changed = forecast_results.copy()\n"
                 "changed['forecast'] = changed['forecast'] + 13\n"
-                "orders_viz.render(changed, show=False)\n"
-                "shifted = next(line for line in orders_viz.figure.axes[0].lines "
+                "forecast_viz.render(changed, show=False)\n"
+                "shifted = next(line for line in forecast_viz.figure.axes[0].lines "
                 "if line.get_label() == 'Supplied forecast')\n"
                 "np.testing.assert_allclose(shifted.get_ydata(), changed.forecast)\n"
                 f"assert offline_calls == {expected_calls}"

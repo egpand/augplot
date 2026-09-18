@@ -45,7 +45,7 @@ CV_BARS = '''def plot_data(data, *, title=None, figsize=None):
 
 CV_HIGHLIGHT = CV_BARS.replace("highlight = False", "highlight = True")
 
-ORDERS_DOTS = '''def plot_data(data, *, title=None, figsize=None):
+LATENCY_DOTS = '''def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
     import seaborn as sns
@@ -53,12 +53,12 @@ ORDERS_DOTS = '''def plot_data(data, *, title=None, figsize=None):
     fig, ax = plt.subplots(figsize=figsize or (11, 5.5))
     actuals = frame.dropna(subset=["actual"])
     sns.scatterplot(data=actuals, x="week", y="actual", color="#008C95",
-                    s=60, alpha=0.85, label="Observed orders", ax=ax)
+                    s=60, alpha=0.85, label="Observed latency", ax=ax)
     locator = mdates.AutoDateLocator()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-    ax.set(xlabel="Week", ylabel="Orders")
-    ax.set_title(title or "Weekly orders", pad=18)
+    ax.set(xlabel="Week", ylabel="Latency (ms)")
+    ax.set_title(title or "Weekly inference latency", pad=18)
     ax.grid(alpha=0.2)
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False)
@@ -78,14 +78,14 @@ FORECAST_OVERLAY = '''    forecast = frame.dropna(subset=["forecast"])
     outside = frame[(frame["actual"] < frame["lower"]) | (frame["actual"] > frame["upper"])]
     ax.scatter(outside["week"], outside["actual"], marker="D", s=90, color="#BE3455",
                edgecolors="white", linewidths=0.8, label="Outside supplied interval", zorder=5)
-    ax.set_title(title or "Weekly orders | supplied forecast and interval", pad=18)
+    ax.set_title(title or "Weekly inference latency | supplied forecast and interval", pad=18)
     ax.legend(frameon=False, loc="upper left")'''
 
-ORDERS_FORECAST = ORDERS_DOTS.replace(
+LATENCY_FORECAST = LATENCY_DOTS.replace(
     "    fig.tight_layout()", FORECAST_OVERLAY + "\n    fig.tight_layout()"
 )
 
-ORDERS_PLOTLY = '''def plot_data(data, *, title=None, figsize=None):
+LATENCY_PLOTLY = '''def plot_data(data, *, title=None, figsize=None):
     import plotly.graph_objects as go
     frame = data.sort_values("week")
     fig = go.Figure()
@@ -99,7 +99,7 @@ ORDERS_PLOTLY = '''def plot_data(data, *, title=None, figsize=None):
                 "<br>Forecast: %{customdata[1]:,.0f}<br>Lower: %{customdata[2]:,.0f}"
                 "<br>Upper: %{customdata[3]:,.0f}<extra></extra>")
     fig.add_trace(go.Scatter(x=frame["week"], y=frame["actual"], mode="markers",
-                             marker={"color": "#008C95", "size": 8}, name="Observed orders",
+                             marker={"color": "#008C95", "size": 8}, name="Observed latency",
                              customdata=hover, hovertemplate=template))
     fig.add_trace(go.Scatter(x=frame["week"], y=frame["forecast"], mode="lines+markers",
                              line={"color": "#ED8500", "dash": "dash"}, connectgaps=False,
@@ -112,8 +112,8 @@ ORDERS_PLOTLY = '''def plot_data(data, *, title=None, figsize=None):
                              hovertemplate=template))
     boundary = frame.dropna(subset=["forecast"])["week"].iloc[0]
     fig.add_vline(x=boundary, line_dash="dot", line_color="#526171")
-    fig.update_layout(template="plotly_white", xaxis_title="Week", yaxis_title="Orders",
-                       title=title or "Weekly orders | supplied forecast and interval")
+    fig.update_layout(template="plotly_white", xaxis_title="Week", yaxis_title="Latency (ms)",
+                       title=title or "Weekly inference latency | supplied forecast and interval")
     if figsize is not None:
         fig.update_layout(width=figsize[0] * 100, height=figsize[1] * 100)
     return fig
