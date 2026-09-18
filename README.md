@@ -1,22 +1,15 @@
 # Augplot
 
-Turn notebook data into a chart, refine it in plain English, and export reusable Python.
-Supports Pandas, NumPy, lists, and nested dictionaries—including cross-validation results.
+Augplot generates plots from data already in a Jupyter notebook. Describe the chart,
+refine it in place, and continue with the analysis instead of stopping to write plotting
+code.
 
-## Scope
+It accepts Pandas objects, NumPy arrays, lists, and nested dictionaries. Generated plots
+use Matplotlib, Seaborn, or Plotly and include the Python source that produced them.
 
-**You produce the data and model results; Augplot helps communicate them.**
-It computes chart summaries (means, variation, rankings, residuals) and visualizes
-supplied predictions and intervals. Training, fine-tuning, model selection, and
-generating new predictions belong upstream. Augplot can highlight the highest observed
-CV score; it does not establish which model you should deploy.
-The generation prompt sets this boundary. When the model flags a request
-as out of scope, Augplot raises `ScopeError` without executing code or retrying it.
+## Install
 
-## Quick start
-
-Requires **Python 3.11+** and an LLM provider's model ID and API key.
-Not published to PyPI yet. On macOS/Linux:
+Augplot requires Python 3.11+ and is not yet published to PyPI.
 
 ```bash
 git clone https://github.com/egpand/augplot.git
@@ -25,100 +18,76 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install ".[plotly]" jupyterlab ipykernel
 python -m ipykernel install --user --name augplot --display-name "Python (Augplot)"
+```
 
+Open [the example notebook](examples/quickstart.ipynb):
+
+```bash
 python -m jupyterlab examples/quickstart.ipynb
 ```
 
-Select **Python (Augplot)** and run cells with **Shift+Enter**. The first cell selects
-`openai/gpt-5.6-terra` and prompts for your API key with hidden input; no terminal exports
-are needed. In VS Code, open the notebook and select the same kernel.
+## Usage
 
-Next time, activate `.venv` and launch Jupyter again. No reinstall needed.
-The [example notebook](examples/quickstart.ipynb) shows CV winner highlighting and
-visualizing supplied forecasts, intervals, and missed observations.
+Configure a model and its provider credentials:
 
-## Plot, refine, reuse
+```bash
+export AUGPLOT_MODEL="openai/YOUR_MODEL_ID"
+export OPENAI_API_KEY="..."
+```
+
+Then work directly with notebook data:
 
 ```python
 import augplot as ap
 
-results = {
-    "ridge": {"r2": [0.71, 0.75, 0.73]},
-    "forest": {"r2": [0.80, 0.82, 0.81]},
-}
-
-viz = ap.plot(results)  # automatically chooses a chart and displays it
-viz.refine("Highlight the model with the highest mean R² and label its score")
-viz.render(results, title="Model comparison")  # reuse code; no LLM call
-
-print(viz.code)
-viz.save("vis_utils.py", function_name="plot_cv_results")
+viz = ap.plot(data, prompt="Plot revenue by month")
+viz.refine("Use a line chart and label the latest value")
 ```
 
-The export runs without Augplot or an LLM, using the plotting libraries it imports:
+`ap.plot()` returns the visualization, so it can be reused without another model call:
 
 ```python
-from vis_utils import plot_cv_results
-
-fig = plot_cv_results(results)
-fig
+viz.render(updated_data)
+viz.figure.savefig("revenue.png", dpi=300)
+viz.save("plots.py", function_name="plot_revenue")
 ```
 
-Exports refuse to overwrite existing function names. Refinement uses the fitted data
-snapshot; `render(new_data)` keeps the current code and leaves that snapshot unchanged.
+Inspect the generated source with `viz.code`.
 
-## Options
+## Configuration
 
-Pass these to `ap.plot()`:
+Pass options directly to `ap.plot()`:
 
-| Option | Default | Purpose |
-| --- | --- | --- |
-| `backend` | `"auto"` | Seaborn/Matplotlib automatically; or `"matplotlib"`, `"seaborn"`, `"plotly"`. |
-| `model` | `AUGPLOT_MODEL` | LLM provider/model identifier. |
-| `api_base` | `AUGPLOT_API_BASE` | Custom or local inference endpoint. |
-| `display_format` | `"retina"` | Static output: `"retina"`, `"svg"`, or `"png"`. |
-| `cache_dir` | `".augplot/plots"` | Persistent history location; `None` disables it. |
+```python
+viz = ap.plot(
+    data,
+    backend="seaborn",       # auto, matplotlib, seaborn, or plotly
+    display_format="retina", # retina, png, or svg
+    show=True,
+)
+```
 
-Use `prompt="..."` to describe a chart and `show=False` to suppress display.
-Retina output is automatic; notebook settings stay unchanged. Save static images with
-`viz.figure.savefig("chart.png", dpi=300)`.
+Use `AUGPLOT_MODEL` for the model and `AUGPLOT_API_BASE` for a custom or local endpoint.
+Anthropic and other providers use the credentials expected by LiteLLM. For local Ollama,
+use a model such as `ollama_chat/YOUR_MODEL` and set `AUGPLOT_API_BASE`.
 
-## Persistent history and notebook reruns
+## History
 
-Successful generations and refinements are saved automatically. Identical data and
-settings replay the original plot and its refinement sequence without LLM calls,
-even after a kernel restart. Changed inputs may generate new code.
+Augplot stores generated and refined plots in `.augplot/plots`. Rerunning the same input
+replays saved code without a model call. Keep `.augplot/` with the notebook if you want
+that history to persist. Pass `regenerate=True` to request new code or `cache_dir=None`
+to disable persistence.
 
-**Keep `.augplot/` with your notebook—the `.ipynb` alone does not contain the history.**
-Use `regenerate=True` on `ap.plot()`, `fit()`, or `refine()` to explicitly request new code.
+See [visualization history](docs/visualization-history.md) for the replay rules.
 
-See [How visualization history works](docs/visualization-history.md) for examples.
+## Data and generated code
 
-## LLM providers
+Augplot sends the configured model a bounded profile of the data, including samples,
+field names, and statistics. This is not anonymization. Set `sample_rows=0` to omit sample
+rows, but names, statistics, and scalar dictionary values may still be included.
 
-Inference uses LiteLLM. Set `AUGPLOT_MODEL` and the corresponding credentials:
-
-| Provider | Model identifier | Configuration |
-| --- | --- | --- |
-| OpenAI | `openai/YOUR_MODEL_ID` | `OPENAI_API_KEY` |
-| Anthropic | `anthropic/YOUR_MODEL_ID` | `ANTHROPIC_API_KEY` |
-| Local Ollama | `ollama_chat/YOUR_INSTALLED_MODEL` | `AUGPLOT_API_BASE=http://localhost:11434` |
-
-Local models need a running server and must generate the required JSON/Python.
-New generations use your provider account and may incur charges.
-
-## Data and execution
-
-The model receives a bounded profile with samples, field names, statistics, and your
-prompt. Defaults: `sample_rows=5`, `max_profile_chars=20000`. This is not anonymization;
-`sample_rows=0` still includes names, statistics, and scalar dictionary values.
-Generated code executes locally against a copy of the full data.
-
-**Execution checks are not a security sandbox.** Review generated code and charts.
-Saved code and explanations may contain data details; review before sharing.
-New generations allow one repair request (`max_repairs=0` disables it).
-`timeout=60` limits each model request, not local execution. Saved-code failures raise
-an error without silently calling the LLM.
+Generated Python runs locally against a copy of the full data. The validation checks are
+not a security sandbox; review generated code before using it with sensitive data.
 
 ## Development
 
@@ -128,6 +97,3 @@ python -m pytest
 python -m ruff check .
 python -m build
 ```
-
-Tests mock inference and include notebook replay in fresh kernels. Optional live tests
-require `AUGPLOT_LIVE_TEST=1` and provider configuration, and incur API usage.
