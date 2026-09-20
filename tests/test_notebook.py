@@ -67,7 +67,9 @@ offline_calls = 0
 def offline_complete(**kwargs):
     global offline_calls
     offline_calls += 1
-    return json.dumps({{"code": next(responses), "explanation": "Offline test fixture."}})
+    return json.dumps({{
+        "status": "ok", "code": next(responses), "explanation": "Offline test fixture."
+    }})
 provider.complete = offline_complete
 """
     notebook.cells.insert(0, nbformat.v4.new_code_cell(setup))

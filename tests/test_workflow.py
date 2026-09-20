@@ -24,8 +24,12 @@ def test_fit_refine_and_render(cv_data, fake_model):
     assert len(viz.figure.axes[0].patches) == 2
     assert viz.refine("Make it horizontal", show=False) is viz
     context = json.loads(calls[1]["messages"][1]["content"])
+    assert context["operation"] == "refine"
     assert context["previous_code"] == CV_CODE
     assert context["original_request"] == "auto"
+    assert "# Conditional domain guidance: cross-validation results" in calls[1]["messages"][0][
+        "content"
+    ]
     changed = {"ridge": {"r2": [0.2]}}
     assert viz.render(changed, title="New", figsize=(6, 3), show=False) is viz
     assert viz.figure.axes[0].patches[0].get_width() == pytest.approx(0.2)
@@ -103,10 +107,17 @@ def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monk
         raise AssertionError("Out-of-scope requests must not execute code")
 
     monkeypatch.setattr(core, "execute", unexpected_execution)
-    calls = fake_model(json.dumps({
-        "error": "out_of_scope",
-        "explanation": "Provide predictions from an upstream model to visualize a forecast.",
-    }))
+    calls = fake_model(
+        json.dumps(
+            {
+                "status": "out_of_scope",
+                "code": "",
+                "explanation": (
+                    "Provide predictions from an upstream model to visualize a forecast."
+                ),
+            }
+        )
+    )
     with pytest.raises(ScopeError, match="upstream model"):
         plot([1, 2], prompt="Train a model and forecast next month", show=False)
     assert len(calls) == 1
@@ -115,10 +126,16 @@ def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monk
 
 @pytest.mark.parametrize("operation", ["fit", "refine"])
 def test_scope_refusal_preserves_previous_visualization(fake_model, operation):
-    calls = fake_model(response(ARRAY_CODE), json.dumps({
-        "error": "out_of_scope",
-        "explanation": "Supply the prediction intervals; Augplot does not estimate them.",
-    }))
+    calls = fake_model(
+        response(ARRAY_CODE),
+        json.dumps(
+            {
+                "status": "out_of_scope",
+                "code": "",
+                "explanation": "Supply the prediction intervals; Augplot does not estimate them.",
+            }
+        ),
+    )
     viz = plot([1, 2], show=False)
     previous = (viz.code, viz.figure, viz.history_path)
     saved_files = set(Path(".augplot").rglob("*"))
@@ -136,8 +153,10 @@ def test_payload_contains_profile_not_full_data(fake_model):
     calls = fake_model(response(ARRAY_CODE))
     plot(np.arange(10_000), show=False)
     context = json.loads(calls[0]["messages"][1]["content"])
+    assert context["operation"] == "generate"
     assert len(json.dumps(context["data_profile"])) <= 20_000
     assert len(context["data_profile"]["data"]["sample"]) == 5
+    assert calls[0]["response_format"]["json_schema"]["strict"] is True
 
 
 def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypatch):

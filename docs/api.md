@@ -35,7 +35,7 @@ plt = ap.plot(
 | Option | Meaning |
 | --- | --- |
 | `prompt` | Visualization instruction; `"auto"` asks Augplot to choose. |
-| `model` | LiteLLM model identifier. Defaults to `AUGPLOT_MODEL`. |
+| `model` | LiteLLM model identifier with strict response-schema support. Defaults to `AUGPLOT_MODEL`. |
 | `backend` | `"auto"`, `"matplotlib"`, or `"seaborn"`. |
 | `display_format` | Static notebook output: `"retina"`, `"png"`, or `"svg"`. |
 | `api_base` | Custom provider endpoint. Defaults to `AUGPLOT_API_BASE`. |

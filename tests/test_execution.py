@@ -1,7 +1,9 @@
+import json
+
 import pytest
 from conftest import ARRAY_CODE, response
 
-from augplot import GenerationError
+from augplot import GenerationError, ScopeError
 from augplot.execution import parse_response, validate_code
 
 
@@ -57,3 +59,28 @@ def test_accepts_single_json_fence():
     code, explanation = parse_response("```json\n" + response(ARRAY_CODE) + "\n```")
     assert code == ARRAY_CODE
     assert explanation
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"code": ARRAY_CODE, "explanation": "Missing status"},
+        {"status": "unknown", "code": ARRAY_CODE, "explanation": "Bad status"},
+        {"status": "ok", "code": "", "explanation": "Missing code"},
+        {"status": "ok", "code": ARRAY_CODE, "explanation": "Fine", "extra": True},
+        {"status": "out_of_scope", "code": ARRAY_CODE, "explanation": "Must be empty"},
+    ],
+)
+def test_rejects_responses_outside_unified_schema(payload):
+    with pytest.raises(GenerationError):
+        parse_response(json.dumps(payload))
+
+
+def test_parses_unified_out_of_scope_response():
+    payload = {
+        "status": "out_of_scope",
+        "code": "",
+        "explanation": "Provide upstream predictions.",
+    }
+    with pytest.raises(ScopeError, match="upstream predictions"):
+        parse_response(json.dumps(payload))

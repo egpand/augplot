@@ -43,7 +43,7 @@ DF_CODE = """def plot_data(data, *, title=None, figsize=None):
 """
 
 def response(code, explanation="Compare the observed values."):
-    return json.dumps({"code": code, "explanation": explanation})
+    return json.dumps({"status": "ok", "code": code, "explanation": explanation})
 
 
 @pytest.fixture

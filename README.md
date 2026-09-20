@@ -35,6 +35,11 @@ export AUGPLOT_MODEL="openai/YOUR_MODEL_ID"
 export OPENAI_API_KEY="..."
 ```
 
+For the MVP, the configured model must support strict JSON Schema responses and be
+recognized as such by LiteLLM. Augplot checks this capability before inference and
+raises `ConfigurationError` for unsupported model/provider combinations rather than
+falling back to unconstrained text output.
+
 Then work directly with notebook data:
 
 ```python
@@ -83,9 +88,9 @@ plt = ap.plot(
 )
 ```
 
-Use `AUGPLOT_MODEL` for the model and `AUGPLOT_API_BASE` for a custom or local endpoint.
-Anthropic and other providers use the credentials expected by LiteLLM. For local Ollama,
-use a model such as `ollama_chat/YOUR_MODEL` and set `AUGPLOT_API_BASE`.
+Use `AUGPLOT_MODEL` for the model and `AUGPLOT_API_BASE` for a custom endpoint. Providers
+use the credentials expected by LiteLLM, but only model/provider combinations for which
+LiteLLM reports strict response-schema support are accepted in the MVP.
 
 ## History
 

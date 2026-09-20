@@ -120,21 +120,22 @@ def parse_response(response: str) -> tuple[str, str]:
         result = json.loads(text)
     except (ValueError, TypeError):
         raise GenerationError("Expected a JSON object with code and explanation strings.") from None
-    if (
-        isinstance(result, dict)
-        and result.get("error") == "out_of_scope"
-        and isinstance(result.get("explanation"), str)
-        and result["explanation"].strip()
-    ):
-        raise ScopeError(result["explanation"].strip()[:1000])
-    if not isinstance(result, dict) or not all(
-        isinstance(result.get(field), str) and result[field].strip()
-        for field in ("code", "explanation")
-    ):
-        raise GenerationError("Expected nonempty code and explanation strings.")
-    if len(result["code"]) > 50_000:
+    if not isinstance(result, dict) or set(result) != {"status", "code", "explanation"}:
+        raise GenerationError("Response does not match the Augplot response schema.")
+    status, code, explanation = result["status"], result["code"], result["explanation"]
+    if status not in {"ok", "out_of_scope"}:
+        raise GenerationError("Response has an invalid status.")
+    if not isinstance(code, str) or not isinstance(explanation, str) or not explanation.strip():
+        raise GenerationError("Response has invalid code or explanation fields.")
+    if status == "out_of_scope":
+        if code.strip():
+            raise GenerationError("Out-of-scope responses must have an empty code field.")
+        raise ScopeError(explanation.strip()[:1000])
+    if not code.strip():
+        raise GenerationError("Successful responses must contain code.")
+    if len(code) > 50_000:
         raise GenerationError("Generated code exceeds the 50,000-character limit.")
-    return result["code"].strip() + "\n", result["explanation"].strip()
+    return code.strip() + "\n", explanation.strip()
 
 
 def allowed_imports(backend):

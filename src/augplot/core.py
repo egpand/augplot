@@ -10,7 +10,7 @@ from .execution import execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
-from .prompts import PROMPT_VERSION, SYSTEM_PROMPT
+from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, system_prompt_for
 
 
 class _Visualization:
@@ -83,6 +83,7 @@ class _Visualization:
         model, api_base = self._configuration()
         context = {
             "prompt_version": PROMPT_VERSION,
+            "operation": "refine" if previous_code is not None else "generate",
             "backend": self.backend,
             "request": prompt,
             "data_profile": profile,
@@ -91,17 +92,20 @@ class _Visualization:
             context.update(
                 previous_code=previous_code,
                 original_request=original_prompt,
-                task="Refine the existing function according to request.",
             )
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt_for(request=prompt, profile=profile)},
             {"role": "user", "content": json.dumps(context)},
         ]
         last_error = None
         code = None
         for attempt in range(self.max_repairs + 1):
             response = provider.complete(
-                model=model, messages=messages, api_base=api_base, timeout=self.timeout
+                model=model,
+                messages=messages,
+                api_base=api_base,
+                timeout=self.timeout,
+                response_format=RESPONSE_FORMAT,
             )
             try:
                 code, explanation = parse_response(response)
@@ -158,7 +162,9 @@ class _Visualization:
                 record, code, path = saved
                 # Apply the same validation and defensive execution as freshly generated code.
                 code, explanation = parse_response(
-                    json.dumps({"code": code, "explanation": record["explanation"]})
+                    json.dumps(
+                        {"status": "ok", "code": code, "explanation": record["explanation"]}
+                    )
                 )
                 try:
                     figure = execute(code, data, backend=self.backend)

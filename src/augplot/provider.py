@@ -1,14 +1,32 @@
 """Small, replaceable inference boundary; imports and authentication are lazy."""
 
-from .errors import ProviderError
+from .errors import ConfigurationError, ProviderError
 
 
-def complete(*, model: str, messages: list[dict], api_base: str | None, timeout: float) -> str:
+def complete(
+    *,
+    model: str,
+    messages: list[dict],
+    api_base: str | None,
+    timeout: float,
+    response_format: dict | None = None,
+) -> str:
     # Importing augplot must never initialize an SDK or contact a provider.
     import litellm
 
+    if response_format is not None:
+        try:
+            supported = litellm.supports_response_schema(model=model)
+        except Exception:
+            supported = False
+        if not supported:
+            raise ConfigurationError(
+                "The configured model must support strict JSON Schema responses. "
+                "Choose a model that LiteLLM reports as supporting response schemas."
+            )
+
     try:
-        response = litellm.completion(
+        request = dict(
             model=model,
             messages=messages,
             api_base=api_base,
@@ -16,6 +34,9 @@ def complete(*, model: str, messages: list[dict], api_base: str | None, timeout:
             num_retries=0,
             caching=False,
         )
+        if response_format is not None:
+            request["response_format"] = response_format
+        response = litellm.completion(**request)
         content = response.choices[0].message.content
     except Exception as exc:
         # Do not echo SDK exceptions: they can contain headers or request payloads.
