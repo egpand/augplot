@@ -53,7 +53,27 @@ plt.refine(
 )
 ```
 
-`ap.plot()` returns the visualization, so it can be reused without another model call:
+### Workflow
+
+The typical Augplot workflow is:
+
+```text
+plot → refine as needed → to_python
+          └── render anytime
+```
+
+- `plot()` generates the initial visualization.
+- `refine()` revises the current version and can be repeated.
+- `render()` applies the current visualization to compatible data without a model call.
+- `to_python()` exports the current version as standalone Matplotlib or Seaborn code.
+
+Only `plot()` and `refine()` may call the configured model.
+
+Generated and refined versions are saved in `.augplot/plots`, allowing matching
+workflow steps to replay without another model call. Keep `.augplot/` with the
+notebook when you want its visualization history to persist. See [History](#history).
+
+The returned visualization object exposes the model-free reuse and export steps:
 
 ```python
 plt.render(penguins[penguins["island"] == "Biscoe"])
