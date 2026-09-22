@@ -3,23 +3,28 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: pypi-${{ github.event.release.tag_name }}
+  group: pypi-${{ github.event.release.tag_name || github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
     name: Build and verify distributions
-    if: startsWith(github.event.release.tag_name, 'v')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' &&
+      github.event.release.prerelease == false &&
+      startsWith(github.event.release.tag_name, 'v'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-      - name: Check out release tag
+      - name: Check out source
         uses: actions/checkout@v6
         with:
           persist-credentials: false
@@ -30,6 +35,7 @@ jobs:
           python-version: "3.12"
 
       - name: Verify tag matches package version
+        if: github.event_name == 'release'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
@@ -94,6 +100,10 @@ jobs:
   publish:
     name: Publish distributions to PyPI
     needs: build
+    if: >-
+      github.event_name == 'release' &&
+      github.event.release.prerelease == false &&
+      startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     environment:
       name: pypi
