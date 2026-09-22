@@ -8,13 +8,14 @@ from contextlib import ExitStack
 from .errors import GenerationError, ScopeError
 from .profiling import copy_data
 
-API_MANIFEST_VERSION = 1
+API_MANIFEST_VERSION = 2
 MAX_SOURCE_CHARS = 50_000
 MAX_AST_NODES = 4_000
 MAX_LITERAL_ITEMS = 2_000
 MAX_STATIC_RANGE = 10_000
 MAX_STATIC_INTEGER = 10_000_000
 MAX_LOOPS = 10
+MAX_BOUNDED_ITERATION = 200
 _IMPORT_ALIASES = {
     "numpy": "np",
     "pandas": "pd",
@@ -248,6 +249,50 @@ _DATA_PROPERTIES = {
     "str",
     "values",
 }
+_BOUND_PRESERVING_DATA_METHODS = {
+    "abs",
+    "astype",
+    "between",
+    "clip",
+    "copy",
+    "cummax",
+    "cummin",
+    "cumprod",
+    "cumsum",
+    "diff",
+    "drop",
+    "drop_duplicates",
+    "dropna",
+    "duplicated",
+    "eq",
+    "ffill",
+    "fillna",
+    "ge",
+    "gt",
+    "head",
+    "isin",
+    "isna",
+    "le",
+    "lt",
+    "notna",
+    "pct_change",
+    "rank",
+    "rename",
+    "reset_index",
+    "round",
+    "select_dtypes",
+    "shift",
+    "sort_index",
+    "sort_values",
+    "squeeze",
+    "tail",
+    "to_frame",
+    "to_list",
+    "to_numpy",
+    "tolist",
+    "unique",
+    "where",
+}
 _PYPLOT = {
     "Rectangle",
     "bar",
@@ -350,6 +395,7 @@ _FIGURE = {
     "suptitle",
     "supxlabel",
     "supylabel",
+    "text",
     "tight_layout",
 }
 _AXES = {
@@ -616,6 +662,39 @@ class _Validator:
             return node.value
         return None
 
+    def bounded_count(self, node, *, default=None):
+        if node is None:
+            return default
+        value = self.static_integer(node)
+        if value is not None and 0 <= value <= MAX_BOUNDED_ITERATION:
+            return value
+        return None
+
+    def bounded_head_or_tail(self, node):
+        count_keywords = [keyword for keyword in node.keywords if keyword.arg == "n"]
+        if (
+            len(node.args) > 1
+            or len(count_keywords) > 1
+            or any(keyword.arg != "n" for keyword in node.keywords)
+            or (node.args and count_keywords)
+        ):
+            return False
+        count_node = count_keywords[0].value if count_keywords else None
+        if count_node is None and node.args:
+            count_node = node.args[0]
+        return self.bounded_count(count_node, default=5) is not None
+
+    def bounded_range(self, node):
+        if not 1 <= len(node.args) <= 3 or node.keywords:
+            return False
+        values = [self.static_integer(argument) for argument in node.args]
+        if any(value is None or abs(value) > MAX_STATIC_RANGE for value in values):
+            return False
+        try:
+            return len(range(*values)) <= MAX_BOUNDED_ITERATION
+        except (TypeError, ValueError, OverflowError):
+            return False
+
     def keyword_value(self, node, name):
         return next((item.value for item in node.keywords if item.arg == name), None)
 
@@ -736,11 +815,14 @@ class _Validator:
             if self.loops > MAX_LOOPS:
                 self.fail("loop_limit", "Generated source contains too many loops.")
             kind = self.expr(n.iter)
-            if kind != "axes_sequence":
-                self.fail("resource_limit", "Loops may iterate only over bounded Axes sequences.")
+            if kind not in {"axes_sequence", "bounded_column", "bounded_sequence"}:
+                self.fail(
+                    "resource_limit",
+                    "Loops may iterate only over statically or explicitly bounded sequences.",
+                )
             if self.loop_depth:
                 self.fail("resource_limit", "Nested loops are not allowed.")
-            self.assign(n.target, "axes_sequence")
+            self.assign(n.target, "axes_sequence" if kind == "axes_sequence" else "value")
             self.loop_depth += 1
             try:
                 for s in n.body + n.orelse:
@@ -765,7 +847,14 @@ class _Validator:
             if kind == "figure":
                 self.figures.add(target.id)
         elif isinstance(target, (ast.Tuple, ast.List)):
-            if kind not in {"figure_axes", "sequence", "axes", "axes_sequence", "value"}:
+            if kind not in {
+                "figure_axes",
+                "bounded_sequence",
+                "sequence",
+                "axes",
+                "axes_sequence",
+                "value",
+            }:
                 self.fail("assignment", "This value cannot be unpacked.")
             for i, elt in enumerate(target.elts):
                 self.assign(
@@ -811,7 +900,9 @@ class _Validator:
             if len(n.elts) > MAX_LITERAL_ITEMS:
                 self.fail("literal_size", "Generated source contains an oversized literal.")
             kinds = [self.expr(x) for x in n.elts]
-            return "axes_sequence" if "axes" in kinds or "axes_sequence" in kinds else "sequence"
+            if "axes" in kinds or "axes_sequence" in kinds:
+                return "axes_sequence"
+            return "bounded_sequence" if len(n.elts) <= MAX_BOUNDED_ITERATION else "sequence"
         if isinstance(n, ast.Dict):
             if len(n.keys) > MAX_LITERAL_ITEMS or any(k is None for k in n.keys):
                 self.fail(
@@ -824,7 +915,19 @@ class _Validator:
         if isinstance(n, ast.Subscript):
             base = self.expr(n.value)
             self.expr(n.slice)
-            return "axes" if base in {"axes", "axes_sequence"} else "data"
+            if base in {"axes", "axes_sequence"}:
+                return "axes"
+            if base == "bounded_data" and isinstance(n.slice, ast.Constant):
+                return "bounded_column"
+            if base == "bounded_column" and isinstance(n.slice, ast.Slice):
+                return "bounded_column"
+            if base == "bounded_sequence" and isinstance(n.slice, ast.Slice):
+                return "bounded_sequence"
+            if base in {"bounded_column", "bounded_data"}:
+                return "bounded_data"
+            if base == "bounded_sequence":
+                return "value"
+            return "data"
         if isinstance(n, ast.Slice):
             for x in (n.lower, n.upper, n.step):
                 if x:
@@ -837,7 +940,14 @@ class _Validator:
                 return "axes_sequence"
             if len(kinds) == 1:
                 return kinds.pop()
-            if kinds <= {"data", "value", "sequence"}:
+            if kinds <= {
+                "bounded_column",
+                "bounded_data",
+                "bounded_sequence",
+                "data",
+                "value",
+                "sequence",
+            }:
                 return "data"
             self.fail("provenance", "Conditional expression has incompatible capabilities.")
         if isinstance(n, (ast.BinOp, ast.BoolOp, ast.Compare, ast.UnaryOp)):
@@ -852,7 +962,11 @@ class _Validator:
                 self.fail("resource_limit", "Nested comprehensions are not allowed.")
             before = self.env.copy()
             generator = n.generators[0]
-            if generator.is_async or self.expr(generator.iter) not in {
+            iterable_kind = self.expr(generator.iter)
+            if generator.is_async or iterable_kind not in {
+                "bounded_data",
+                "bounded_column",
+                "bounded_sequence",
                 "data",
                 "sequence",
                 "axes_sequence",
@@ -868,7 +982,32 @@ class _Validator:
                 self.expr(n.elt)
             self.env = before
             self.invalid_provenance.update(self.assigned_names(generator.target))
-            return "sequence"
+            return (
+                "bounded_sequence"
+                if iterable_kind in {"bounded_column", "bounded_sequence", "axes_sequence"}
+                else "sequence"
+            )
+        if isinstance(n, ast.JoinedStr):
+            if (
+                sum(
+                    len(value.value)
+                    for value in n.values
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str)
+                )
+                > MAX_LITERAL_ITEMS
+            ):
+                self.fail("literal_size", "Generated source contains an oversized literal.")
+            for value in n.values:
+                self.expr(value)
+            return "value"
+        if isinstance(n, ast.FormattedValue):
+            if n.conversion != -1 or n.format_spec is not None:
+                self.fail(
+                    "format_string",
+                    "Formatted labels cannot use conversions or format specifications.",
+                )
+            self.expr(n.value)
+            return "value"
         if isinstance(n, ast.Call):
             return self.call(n)
         if isinstance(n, ast.Attribute):
@@ -881,8 +1020,25 @@ class _Validator:
         if n.attr.startswith("_"):
             self.fail("private_access", "Private and dunder attributes are not allowed.")
         base = self.expr(n.value)
-        if base in {"data", "value", "sequence"} and n.attr in _DATA_PROPERTIES:
-            return "data"
+        if (
+            base
+            in {
+                "bounded_column",
+                "bounded_data",
+                "bounded_sequence",
+                "data",
+                "value",
+                "sequence",
+            }
+            and n.attr in _DATA_PROPERTIES
+        ):
+            return (
+                "bounded_column"
+                if base == "bounded_column"
+                else "bounded_data"
+                if base in {"bounded_data", "bounded_sequence"}
+                else "data"
+            )
         if base == "axes" and n.attr in {"xaxis", "yaxis"}:
             return "axis"
         if base == "artist" and n.attr in {"figure", "fig"}:
@@ -911,6 +1067,23 @@ class _Validator:
                 self.fail("loop_bound", "range() must use small static integer bounds.")
             if n.func.id == "zip" and arg_kinds and arg_kinds[0] in {"axes", "axes_sequence"}:
                 return "axes_sequence"
+            if n.func.id == "range" and self.bounded_range(n):
+                return "bounded_sequence"
+            bounded_kinds = {"bounded_column", "bounded_sequence"}
+            if n.func.id == "zip" and any(kind in bounded_kinds for kind in arg_kinds):
+                return "bounded_sequence"
+            if n.func.id in {
+                "dict",
+                "enumerate",
+                "filter",
+                "list",
+                "map",
+                "reversed",
+                "set",
+                "sorted",
+                "tuple",
+            } and any(kind in bounded_kinds for kind in arg_kinds):
+                return "bounded_sequence"
             return (
                 "sequence"
                 if n.func.id
@@ -939,14 +1112,18 @@ class _Validator:
             for keyword in n.keywords
             if keyword.arg is not None and keyword.arg.casefold() != "backend"
         } & _DANGEROUS_KEYWORDS
-        if base == "data" and attr in _DYNAMIC_BACKEND_METHODS and active_keywords:
+        if (
+            base in {"bounded_column", "bounded_data", "data"}
+            and attr in _DYNAMIC_BACKEND_METHODS
+            and active_keywords
+        ):
             self.validate_keywords(n)
-        if base == "data" and attr in _DYNAMIC_BACKEND_METHODS:
+        if base in {"bounded_column", "bounded_data", "data"} and attr in _DYNAMIC_BACKEND_METHODS:
             self.fail(
                 "dynamic_backend",
                 "Pandas plotting dispatch is not allowed; use Matplotlib or Seaborn directly.",
             )
-        if base == "data" and attr in _DYNAMIC_DISPATCH_METHODS:
+        if base in {"bounded_column", "bounded_data", "data"} and attr in _DYNAMIC_DISPATCH_METHODS:
             self.fail(
                 "dynamic_dispatch",
                 "Pandas callable and string dispatch methods are not allowed.",
@@ -987,7 +1164,20 @@ class _Validator:
             )
         if base == "module:seaborn" and attr in _SEABORN:
             return "artist"
-        if base == "data" and attr in _DATA_METHODS:
+        if base in {"bounded_column", "bounded_data", "data"} and attr in _DATA_METHODS:
+            if attr in {"head", "tail"} and self.bounded_head_or_tail(n):
+                return "bounded_column" if base == "bounded_column" else "bounded_data"
+            if base in {"bounded_column", "bounded_data"} and attr in {
+                "to_list",
+                "to_numpy",
+                "tolist",
+                "unique",
+            }:
+                return "bounded_sequence"
+            if base in {"bounded_column", "bounded_data"} and attr in (
+                _BOUND_PRESERVING_DATA_METHODS
+            ):
+                return base
             return "data"
         if base == "figure" and attr in _FIGURE:
             return "axes" if attr in {"add_axes", "add_subplot", "subplots"} else "artist"
@@ -1022,7 +1212,7 @@ class _Validator:
             return "figure" if attr == "get_figure" else "artist"
         if base == "axis" and attr in _AXIS:
             return "artist"
-        if base == "sequence" and attr in _SEQUENCE_METHODS:
+        if base in {"bounded_sequence", "sequence"} and attr in _SEQUENCE_METHODS:
             return "value"
         self.fail("call", "Call target is not in the approved capability manifest.")
 

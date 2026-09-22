@@ -15,6 +15,16 @@ Imports use fixed aliases: `np`, `pd`, `plt`, `ticker`, `dates`, and `sns`.
 Every call and attribute path is checked, and figures, axes, artists, and data-derived
 values are tracked so that a valid object cannot be substituted with an arbitrary callable.
 
+Loops are limited to approved Axes collections, small static sequences, or columns selected
+from data explicitly bounded to at most 200 rows with `head` or `tail`. This supports panel
+styling and per-record chart annotations without permitting unbounded or nested generated
+loops.
+
+The generation prompt summarizes the validator's main constraints so a provider is less
+likely to emit code that needs repair. This is compatibility guidance only: the prompt is
+not trusted or relied upon for enforcement, and generated source must still pass the
+independent validator before execution.
+
 ## What is rejected
 
 The validator rejects unknown or indirect call targets, module traversal, private or dunder
