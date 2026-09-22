@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import provider
 from .errors import ConfigurationError, GenerationError
-from .execution import execute, parse_response
+from .execution import API_MANIFEST_VERSION, execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
@@ -140,6 +140,7 @@ class _Visualization:
         model, api_base = self._configuration()
         settings = {
             "history_version": HISTORY_VERSION,
+            "api_manifest_version": API_MANIFEST_VERSION,
             "prompt_version": PROMPT_VERSION,
             "data": data_hash,
             "model": model,

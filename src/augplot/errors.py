@@ -1,5 +1,14 @@
 """Public exceptions. Provider/runtime diagnostics never include raw data or credentials."""
 
+from typing import TypedDict
+
+
+class ValidationViolation(TypedDict):
+    """A machine-readable generated-code validation failure."""
+
+    rule: str
+    message: str
+
 
 class AugplotError(Exception):
     """Base class for Augplot errors."""
@@ -24,7 +33,13 @@ class ScopeError(AugplotError, ValueError):
 class GenerationError(AugplotError):
     """The model did not produce a valid, executable plot."""
 
-    def __init__(self, message: str, *, code: str | None = None, violations=None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        violations: list[ValidationViolation] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.violations = list(violations or [])

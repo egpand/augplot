@@ -47,9 +47,11 @@ except ap.GenerationError as exc:
     print(exc.code)        # inspect only when appropriate
 ```
 
-Saved source is revalidated every time it is replayed. A cache checksum establishes file
-integrity, not trust. If saved code is rejected, Augplot does not execute it or make an
-automatic model request; use `regenerate=True` to explicitly request new code.
+Saved source is revalidated every time it is replayed. The capability-manifest version is
+part of both the cache identity and its metadata, so changing the approved capabilities
+cannot silently reuse code accepted under an older manifest. A cache checksum establishes
+file integrity, not trust. If saved code is rejected, Augplot does not execute it or make
+an automatic model request; use `regenerate=True` to explicitly request new code.
 
 ## Remaining risk
 

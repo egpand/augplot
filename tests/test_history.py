@@ -190,6 +190,42 @@ def test_recomputed_checksum_does_not_trust_malicious_cached_source(fake_model):
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize(
+    ("operation", "rule"),
+    [
+        ('frame.apply("to_pickle", args=("must-not-exist.pkl",))', "dynamic_dispatch"),
+        ('frame.plot(backend="attacker_module")', "dynamic_backend"),
+        ('frame.plot(url="javascript:alert(1)")', "dangerous_keyword"),
+    ],
+)
+def test_recomputed_checksum_cannot_trust_new_manifest_bypasses(
+    fake_model, operation, rule
+):
+    calls = fake_model(response(ARRAY_CODE))
+    viz = plot([1, 2], show=False)
+    malicious = ARRAY_CODE.replace(
+        "import matplotlib.pyplot as plt",
+        "import pandas as pd\n    import matplotlib.pyplot as plt",
+    ).replace(
+        "ax.plot(data)",
+        f'frame = pd.DataFrame({{"value": data}})\n    {operation}',
+    )
+    viz.history_path.write_text(malicious)
+    lookup = next(
+        path for path in viz.history_path.parent.glob("*.json") if len(path.stem) == 64
+    )
+    record = json.loads(lookup.read_text())
+    record["code_hash"] = hashlib.sha256(malicious.encode()).hexdigest()
+    lookup.write_text(json.dumps(record))
+
+    with pytest.raises(GenerationError, match="no LLM request") as caught:
+        plot([1, 2], show=False)
+
+    assert caught.value.violations[0]["rule"] == rule
+    assert not Path("must-not-exist.pkl").exists()
+    assert len(calls) == 1
+
+
 def test_cache_can_be_disabled_or_relocated(fake_model, tmp_path):
     calls = fake_model(*(response(ARRAY_CODE) for _ in range(4)))
     for _ in range(2):

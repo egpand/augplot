@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .errors import ConfigurationError, DataError
+from .execution import API_MANIFEST_VERSION
 
 HISTORY_VERSION = 1
 
@@ -123,6 +124,7 @@ class History:
             record = json.loads(entry.read_text(encoding="utf-8"))
             if (
                 record["history_version"] != HISTORY_VERSION
+                or record["api_manifest_version"] != API_MANIFEST_VERSION
                 or record["request_key"] != key
                 or record["root"] != root
                 or not isinstance(record["explanation"], str)
@@ -152,6 +154,7 @@ class History:
         filename = f"{label}_{revision}.py"
         record = {
             "history_version": HISTORY_VERSION,
+            "api_manifest_version": API_MANIFEST_VERSION,
             "root": root,
             "request_key": key,
             "revision": revision,
