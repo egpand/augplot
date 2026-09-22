@@ -9,22 +9,14 @@ use Matplotlib or Seaborn and include the Python source that produced them.
 
 ## Install
 
-Augplot requires Python 3.11+ and is not yet published to PyPI.
+Augplot requires Python 3.11+.
 
 ```bash
-git clone https://github.com/egpand/augplot.git
-cd augplot
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install . jupyterlab ipykernel
-python -m ipykernel install --user --name augplot --display-name "Python (Augplot)"
+pip install augplot
 ```
 
-Open [the example notebook](examples/quickstart.ipynb):
-
-```bash
-python -m jupyterlab examples/quickstart.ipynb
-```
+Then open or download [the example notebook](examples/quickstart.ipynb) to try the
+workflow.
 
 ## Usage
 
@@ -133,6 +125,24 @@ in depth, not an OS sandbox. See [generated-code guardrails](docs/generated-code
 
 Augplot visualizes supplied data only. It can compute plot-related summaries and trends,
 but does not train models or return predictions, forecasts, or other analytical artifacts.
+
+## Beta status and limitations
+
+Augplot 0.1.0 is a beta release. APIs and saved-history formats may change before 1.0,
+and plotting requires a configured model with strict JSON Schema support. Generated code
+is validated before local execution, but this validation is defense in depth rather than
+an OS sandbox. Review generated code before using Augplot with sensitive data or in
+security-critical environments.
+
+## Security
+
+Report vulnerabilities privately as described in the [security policy](SECURITY.md). See
+[generated-code guardrails](docs/generated-code-guardrails.md) for Augplot's validation
+and execution boundaries.
+
+## License
+
+Augplot is licensed under the [Apache License 2.0](LICENSE).
 
 ## Development
 
