@@ -14,3 +14,8 @@ vis_utils.py
 examples/vis_utils.py
 examples/.augplot
 augplot_utils*.py
+
+# Local inputs used to compose the README hero.
+docs/assets/build_augplot_workflow.py
+docs/assets/airline-lines-original.png
+docs/assets/airline-heatmap-original.png
