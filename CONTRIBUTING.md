@@ -16,7 +16,7 @@ By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Development setup
 
-Augplot supports Python 3.11 and newer. Create an isolated environment, then install the
+Augplot supports Python 3.11 through 3.14. Create an isolated environment, then install the
 project with its development dependencies:
 
 ```bash

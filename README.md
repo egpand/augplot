@@ -9,7 +9,7 @@ use Matplotlib or Seaborn and include the Python source that produced them.
 
 ## Install
 
-Augplot requires Python 3.11+.
+Augplot supports Python 3.11 through 3.14.
 
 ```bash
 pip install augplot
