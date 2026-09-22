@@ -24,6 +24,7 @@ class ScopeError(AugplotError, ValueError):
 class GenerationError(AugplotError):
     """The model did not produce a valid, executable plot."""
 
-    def __init__(self, message: str, *, code: str | None = None):
+    def __init__(self, message: str, *, code: str | None = None, violations=None):
         super().__init__(message)
         self.code = code
+        self.violations = list(violations or [])

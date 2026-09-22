@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -171,6 +172,21 @@ def test_cached_execution_failure_does_not_call_model(fake_model, monkeypatch):
     monkeypatch.setattr("augplot.core.execute", broken)
     with pytest.raises(GenerationError, match="no LLM request"):
         plot([1, 2], show=False)
+    assert len(calls) == 1
+
+
+def test_recomputed_checksum_does_not_trust_malicious_cached_source(fake_model):
+    calls = fake_model(response(ARRAY_CODE))
+    viz = plot([1, 2], show=False)
+    malicious = ARRAY_CODE.replace("ax.plot(data)", "fig.savefig('/tmp/never-write')")
+    viz.history_path.write_text(malicious)
+    lookup = next(path for path in viz.history_path.parent.glob("*.json") if len(path.stem) == 64)
+    record = json.loads(lookup.read_text())
+    record["code_hash"] = hashlib.sha256(malicious.encode()).hexdigest()
+    lookup.write_text(json.dumps(record))
+    with pytest.raises(GenerationError, match="no LLM request") as caught:
+        plot([1, 2], show=False)
+    assert caught.value.violations
     assert len(calls) == 1
 
 

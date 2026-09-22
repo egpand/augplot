@@ -123,22 +123,16 @@ See [visualization history](docs/visualization-history.md) for the replay rules.
 
 ## Data and generated code
 
-Augplot sends the configured model a bounded profile of the data, including samples,
-field names, and statistics. This is not anonymization. Set `sample_rows=0` to omit sample
-rows, but names, statistics, and scalar dictionary values may still be included.
+Augplot sends the configured model a bounded profile of your data, including samples,
+field names, and statistics. This is not anonymization; `sample_rows=0` omits samples but
+not all schema or summary information.
 
-Generated Python runs locally against a copy of the full data. The validation checks are
-not a security sandbox; review generated code before using it with sensitive data.
+Generated Python runs locally against a copy of the data after validation. Invalid fresh
+output gets at most one repair attempt; rejected code never runs or saves. This is defense
+in depth, not an OS sandbox. See [generated-code guardrails](docs/generated-code-guardrails.md).
 
-The scope boundary is the selected visualization backend. If Matplotlib or Seaborn can
-compute something from the supplied data while rendering the figure, it is in scope. That
-includes aggregation, histogram bins, density estimates, regression or smoothing trends,
-descriptive error bars, and confidence intervals.
-
-The boundary is the figure: Augplot does not use a separate modeling system or return a
-fitted model, transformed dataset, predictions, or other analytical artifacts. Future
-predictions, forecasts, and their intervals must be supplied upstream, although the
-selected backend can visualize them.
+Augplot visualizes supplied data only. It can compute plot-related summaries and trends,
+but does not train models or return predictions, forecasts, or other analytical artifacts.
 
 ## Development
 

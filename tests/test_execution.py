@@ -2,6 +2,7 @@ import json
 
 import pytest
 from conftest import ARRAY_CODE, response
+from notebook_charts import FLIGHTS_HEATMAP, FLIGHTS_LINES, PENGUIN_FACETS, PENGUIN_SCATTER
 
 from augplot import GenerationError, ScopeError
 from augplot.execution import parse_response, validate_code
@@ -53,6 +54,53 @@ def test_rejects_executable_definition_metadata_and_extra_definitions(code):
 def test_backend_import_enforced():
     with pytest.raises(GenerationError):
         validate_code(ARRAY_CODE.replace("ax.plot(data)", "import seaborn as sns"), "matplotlib")
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "pd.io.common.os.environ.get('SECRET')",
+        "pd.io.common.urlopen('https://example.invalid')",
+        "pd.io.common.os.remove('/tmp/never')",
+        "plt.imread('/tmp/never')",
+        "plt.imsave('/tmp/never', data)",
+        "pd.read_pickle('/tmp/never')",
+        "np.save('/tmp/never', data)",
+        "fn = ax.plot\n    fn(data)",
+        "data['plot'](data)",
+        "plt = pd\n    plt.read_csv('/tmp/never')",
+        "__import__('os').system('false')",
+        "import os as os",
+        "fig.savefig('/tmp/never')",
+    ],
+)
+def test_manifest_rejects_indirect_and_io_capabilities(statement):
+    code = ARRAY_CODE.replace("ax.plot(data)", statement)
+    with pytest.raises(GenerationError) as caught:
+        validate_code(code, "auto")
+    assert caught.value.violations
+
+
+def test_manifest_accepts_tick_formatters_and_figure_level_seaborn():
+    ticks = ARRAY_CODE.replace(
+        'ax.set_title(title or "Values")',
+        'ax.xaxis.set_major_locator(ticker.MaxNLocator(5))\n    ax.set_title(title or "Values")',
+    ).replace("import matplotlib.pyplot as plt", "import matplotlib.pyplot as plt\n    import matplotlib.ticker as ticker")
+    validate_code(ticks, "matplotlib")
+    seaborn_grid = '''def plot_data(data, *, title=None, figsize=None):
+    import seaborn as sns
+    grid = sns.displot(data=data)
+    fig = grid.figure
+    return fig
+'''
+    validate_code(seaborn_grid, "seaborn")
+
+
+@pytest.mark.parametrize(
+    "code", [PENGUIN_SCATTER, PENGUIN_FACETS, FLIGHTS_LINES, FLIGHTS_HEATMAP]
+)
+def test_quickstart_generated_plot_corpus_passes_manifest(code):
+    validate_code(code, "auto")
 
 
 def test_accepts_single_json_fence():

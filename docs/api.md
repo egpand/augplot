@@ -139,4 +139,5 @@ All public exceptions inherit from `ap.AugplotError`:
 | `ap.ScopeError` | The request requires work outside the selected visualization backend. |
 
 See [visualization history](visualization-history.md) for cache keys, branching,
-regeneration, and replay behavior.
+regeneration, and replay behavior. See [generated-code guardrails](generated-code-guardrails.md)
+for validation, repair, and rejected-code behavior.

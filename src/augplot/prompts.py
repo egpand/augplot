@@ -91,7 +91,8 @@ schema. Do not mutate `data`.
 
 Use only imports inside the function from numpy, pandas, matplotlib.pyplot,
 matplotlib.ticker, matplotlib.dates, or seaborn, as permitted by the requested backend.
-Use explicit public aliases for module imports, such as `import numpy as np`. Avoid
+Use these exact public aliases: `np`, `pd`, `plt`, `ticker`, `dates`, and `sns`
+respectively (for example, `import numpy as np`). Avoid
 identifiers starting with an underscore, including throwaway loop variables. Do not
 use other imports, files, URLs, network access, environment variables, introspection,
 dynamic execution, dunder or private attributes, classes, nested functions, decorators,

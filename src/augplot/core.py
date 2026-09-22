@@ -132,6 +132,7 @@ class _Visualization:
             f"Could not generate a working visualization after {self.max_repairs + 1} "
             f"attempt(s). {last_error}",
             code=code,
+            violations=last_error.violations if last_error is not None else None,
         ) from None
 
     def _resolve(self, data, profile, prompt, *, data_hash, regenerate, refining=False):
@@ -173,6 +174,7 @@ class _Visualization:
                         "Saved visualization failed; no LLM request was made. Restore the "
                         "compatible environment or use regenerate=True explicitly. " + str(exc),
                         code=code,
+                        violations=exc.violations,
                     ) from None
                 return code, explanation, figure, record, path, root, True
         code, explanation, figure = self._generate(
