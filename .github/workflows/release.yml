@@ -84,7 +84,7 @@ jobs:
           AUGPLOT_EXPECTED_VERSION="$PACKAGE_VERSION" /tmp/augplot-wheel/bin/python -c 'import os, augplot; assert augplot.__version__ == os.environ["AUGPLOT_EXPECTED_VERSION"]'
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: python-package-distributions
           path: dist/
