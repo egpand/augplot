@@ -9,7 +9,19 @@ description = "Turn notebook data into visualizations and reusable Python with a
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Pavel Egorov" }]
 requires-python = ">=3.11"
+keywords = ["data-visualization", "jupyter", "llm", "matplotlib", "seaborn"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: Jupyter",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Visualization",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
   "numpy>=1.26,<3",
   "pandas>=2.1,<4",
@@ -21,6 +33,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.9", "build>=1.2", "nbclient>=0.10", "nbformat>=5.10", "ipykernel>=6.29"]
+
+[project.urls]
+Repository = "https://github.com/egpand/augplot"
+Documentation = "https://github.com/egpand/augplot/tree/main/docs"
+Issues = "https://github.com/egpand/augplot/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/augplot"]
