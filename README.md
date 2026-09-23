@@ -40,6 +40,40 @@ viz.to_python(function_name="plot_monthly_passengers")
 Open or download the [example notebook](examples/quickstart.ipynb) to try the complete
 workflow.
 
+## What can `data` be?
+
+`ap.plot(data)` accepts these nonempty, in-memory Python objects:
+
+| Input | Typical use |
+| --- | --- |
+| `pandas.DataFrame` | Rows and columns, including dates and categories. |
+| `pandas.Series` | One labeled sequence of values. |
+| `numpy.ndarray` | One- or two-dimensional numeric or mixed data. |
+| `list` or `tuple` | Values such as `[2, 4, 6]`, or records such as `[{'x': 1, 'y': 2}]`. |
+| `dict` | Columns such as `{'x': [1, 2], 'y': [2, 3]}`, or nested results keyed by model and metric. |
+
+Nested lists and dictionaries can contain ordinary scalars, missing values, NumPy arrays,
+and Pandas objects. Parsed JSON is therefore a valid input when its root is a nonempty
+list or dictionary:
+
+```python
+import json
+
+records = json.loads('[{"month": "Jan", "sales": 10}, {"month": "Feb", "sales": 12}]')
+viz = ap.plot(records)
+
+results = {
+    "baseline": {"test_f1": [0.3, 0.4, 0.5]},
+    "candidate": {"test_f1": [0.4, 0.5, 0.6]},
+}
+viz = ap.plot(results, prompt="Compare F1 scores across models")
+```
+
+Pass the parsed object, not a JSON string or file path. Empty inputs, cyclic containers,
+custom objects, and NumPy arrays with zero or more than two dimensions raise `DataError`.
+For a Pandas `Index`, another table library, or an iterator, convert to one of the types
+above first.
+
 ## Workflow
 
 - `plot()` generates the initial visualization.

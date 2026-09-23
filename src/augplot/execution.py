@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from .errors import GenerationError, ScopeError
 from .profiling import copy_data
 
-API_MANIFEST_VERSION = 2
+API_MANIFEST_VERSION = 8
 MAX_SOURCE_CHARS = 50_000
 MAX_AST_NODES = 4_000
 MAX_LITERAL_ITEMS = 2_000
@@ -176,6 +176,7 @@ _DATA_METHODS = {
     "idxmin",
     "infer_objects",
     "interpolate",
+    "iterrows",
     "isin",
     "isna",
     "items",
@@ -445,6 +446,7 @@ _AXES = {
     "secondary_yaxis",
     "set",
     "set_aspect",
+    "set_axisbelow",
     "set_axis_off",
     "set_axis_on",
     "set_box_aspect",
@@ -456,10 +458,12 @@ _AXES = {
     "set_xlim",
     "set_xscale",
     "set_xticks",
+    "set_xticklabels",
     "set_ylabel",
     "set_ylim",
     "set_yscale",
     "set_yticks",
+    "set_yticklabels",
     "sharex",
     "sharey",
     "specgram",
@@ -612,11 +616,18 @@ class _Validator:
 
     def merge_branches(self, before, body, otherwise):
         merged = {}
+        passive_kinds = {"value", "data", "bounded_sequence"}
         for name in before.keys() | body.keys() | otherwise.keys():
             body_kind = body.get(name)
             otherwise_kind = otherwise.get(name)
             if body_kind == otherwise_kind and body_kind is not None:
                 merged[name] = body_kind
+                self.invalid_provenance.discard(name)
+            elif {body_kind, otherwise_kind} <= passive_kinds:
+                # Keep ordinary values usable after a branch, without carrying a
+                # bounded-iteration proof or a plotting-object capability across it.
+                merged[name] = "data"
+                self.invalid_provenance.discard(name)
             else:
                 self.invalid_provenance.add(name)
         return merged
@@ -694,6 +705,108 @@ class _Validator:
             return len(range(*values)) <= MAX_BOUNDED_ITERATION
         except (TypeError, ValueError, OverflowError):
             return False
+
+    def bounded_slice(self, node):
+        if not isinstance(node, ast.Slice) or node.upper is None:
+            return False
+        lower = 0 if node.lower is None else self.static_integer(node.lower)
+        upper = self.static_integer(node.upper)
+        step = 1 if node.step is None else self.static_integer(node.step)
+        return (
+            lower is not None
+            and upper is not None
+            and step is not None
+            and 0 <= lower <= upper
+            and 0 < step
+            and upper - lower <= MAX_BOUNDED_ITERATION
+        )
+
+    def bounded_arange(self, node):
+        if len(node.args) != 1 or node.keywords:
+            return False
+        stop = node.args[0]
+        return (
+            isinstance(stop, ast.Call)
+            and isinstance(stop.func, ast.Name)
+            and stop.func.id == "len"
+            and len(stop.args) == 1
+            and not stop.keywords
+            and isinstance(stop.args[0], ast.Name)
+            and self.env.get(stop.args[0].id)
+            in {"bounded_column", "bounded_data", "bounded_sequence"}
+        )
+
+    def data_extent(self, node):
+        data_kinds = {"bounded_column", "bounded_data", "bounded_sequence", "data", "sequence"}
+        if isinstance(node, ast.Name):
+            return self.env.get(node.id) == "data_extent"
+        if isinstance(node, ast.Call):
+            return (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "len"
+                and len(node.args) == 1
+                and not node.keywords
+                and isinstance(node.args[0], ast.Name)
+                and self.env.get(node.args[0].id) in data_kinds
+            )
+        if isinstance(node, ast.Attribute):
+            return (
+                node.attr == "size"
+                and isinstance(node.value, ast.Name)
+                and self.env.get(node.value.id) in data_kinds
+            )
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute):
+            return (
+                node.value.attr == "shape"
+                and isinstance(node.value.value, ast.Name)
+                and self.env.get(node.value.value.id) in data_kinds
+                and isinstance(node.slice, ast.Constant)
+                and node.slice.value in {0, 1}
+            )
+        return False
+
+    def data_sized_stop(self, node):
+        if self.data_extent(node):
+            return True
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+            return (
+                self.data_extent(node.left)
+                and isinstance(node.right, ast.Constant)
+                and isinstance(node.right.value, int)
+                and abs(node.right.value) <= 1
+            )
+        return False
+
+    def data_sized_range(self, node):
+        if node.keywords or len(node.args) not in {1, 2}:
+            return False
+        if len(node.args) == 1:
+            return self.data_sized_stop(node.args[0])
+        start = self.static_integer(node.args[0])
+        return start in {0, 1} and self.data_sized_stop(node.args[1])
+
+    def subplot_result(self, node):
+        rows = self.keyword_value(node, "nrows")
+        columns = self.keyword_value(node, "ncols")
+        if rows is None and node.args:
+            rows = node.args[0]
+        if columns is None and len(node.args) > 1:
+            columns = node.args[1]
+        rows = 1 if rows is None else self.static_integer(rows)
+        columns = 1 if columns is None else self.static_integer(columns)
+        squeeze = self.keyword_value(node, "squeeze")
+        is_flat_axes = (
+            isinstance(rows, int)
+            and isinstance(columns, int)
+            and 0 < rows * columns <= 100
+            and rows * columns > 1
+            and (rows == 1 or columns == 1)
+            and (
+                squeeze is None
+                or (isinstance(squeeze, ast.Constant) and squeeze.value is True)
+            )
+        )
+        return "axes_sequence" if is_flat_axes else "axes"
 
     def keyword_value(self, node, name):
         return next((item.value for item in node.keywords if item.arg == name), None)
@@ -822,7 +935,10 @@ class _Validator:
                 )
             if self.loop_depth:
                 self.fail("resource_limit", "Nested loops are not allowed.")
-            self.assign(n.target, "axes_sequence" if kind == "axes_sequence" else "value")
+            target_kind = kind if kind == "axes_sequence" else "value"
+            if kind == "axes_sequence" and isinstance(n.target, ast.Name):
+                target_kind = "axes"
+            self.assign(n.target, target_kind)
             self.loop_depth += 1
             try:
                 for s in n.body + n.orelse:
@@ -849,6 +965,7 @@ class _Validator:
         elif isinstance(target, (ast.Tuple, ast.List)):
             if kind not in {
                 "figure_axes",
+                "figure_axes_sequence",
                 "bounded_sequence",
                 "sequence",
                 "axes",
@@ -857,14 +974,15 @@ class _Validator:
             }:
                 self.fail("assignment", "This value cannot be unpacked.")
             for i, elt in enumerate(target.elts):
-                self.assign(
-                    elt,
-                    "figure"
-                    if i == 0 and kind == "figure_axes"
-                    else "axes"
-                    if kind in {"figure_axes", "axes"} or (kind == "axes_sequence" and i == 0)
-                    else "value",
-                )
+                if i == 0 and kind in {"figure_axes", "figure_axes_sequence"}:
+                    item_kind = "figure"
+                elif kind == "figure_axes_sequence":
+                    item_kind = "axes_sequence"
+                elif kind in {"figure_axes", "axes"} or (kind == "axes_sequence" and i == 0):
+                    item_kind = "axes"
+                else:
+                    item_kind = "value"
+                self.assign(elt, item_kind)
         elif isinstance(target, ast.Subscript):
             # A local, data-derived frame may be reshaped in memory; the caller's
             # original `data` argument and all attribute/module mutation remain blocked.
@@ -875,7 +993,16 @@ class _Validator:
             ):
                 self.expr(target.slice)
                 return
-            self.fail("mutation", "Attribute and subscript assignment are not allowed.")
+            self.fail(
+                "mutation",
+                f"Subscript assignment at generated line {target.lineno} is not allowed.",
+            )
+        elif isinstance(target, ast.Attribute):
+            self.fail(
+                "mutation",
+                f"Assignment to .{target.attr} at generated line {target.lineno} is not "
+                "allowed. Derive a separate local value instead.",
+            )
         else:
             self.fail("mutation", "Attribute and subscript assignment are not allowed.")
 
@@ -892,7 +1019,11 @@ class _Validator:
             if n.id in _BUILTINS:
                 return "builtin:" + n.id
             if n.id in self.invalid_provenance:
-                self.fail("provenance", "Name does not have one capability on every path.")
+                self.fail(
+                    "provenance",
+                    f"Name {n.id!r} at generated line {n.lineno} does not have one "
+                    "capability on every path.",
+                )
             if n.id.startswith("_") or n.id not in self.env:
                 self.fail("name", "Source references an unknown capability or name.")
             return self.env[n.id]
@@ -900,8 +1031,10 @@ class _Validator:
             if len(n.elts) > MAX_LITERAL_ITEMS:
                 self.fail("literal_size", "Generated source contains an oversized literal.")
             kinds = [self.expr(x) for x in n.elts]
-            if "axes" in kinds or "axes_sequence" in kinds:
+            if kinds and all(kind == "axes" for kind in kinds):
                 return "axes_sequence"
+            if "axes" in kinds or "axes_sequence" in kinds:
+                self.fail("provenance", "Axes collections may contain only approved Axes.")
             return "bounded_sequence" if len(n.elts) <= MAX_BOUNDED_ITERATION else "sequence"
         if isinstance(n, ast.Dict):
             if len(n.keys) > MAX_LITERAL_ITEMS or any(k is None for k in n.keys):
@@ -915,6 +1048,10 @@ class _Validator:
         if isinstance(n, ast.Subscript):
             base = self.expr(n.value)
             self.expr(n.slice)
+            if self.data_extent(n):
+                return "data_extent"
+            if base == "spines":
+                return "artist"
             if base in {"axes", "axes_sequence"}:
                 return "axes"
             if base == "bounded_data" and isinstance(n.slice, ast.Constant):
@@ -922,6 +1059,8 @@ class _Validator:
             if base == "bounded_column" and isinstance(n.slice, ast.Slice):
                 return "bounded_column"
             if base == "bounded_sequence" and isinstance(n.slice, ast.Slice):
+                return "bounded_sequence"
+            if base == "sequence" and self.bounded_slice(n.slice):
                 return "bounded_sequence"
             if base in {"bounded_column", "bounded_data"}:
                 return "bounded_data"
@@ -1020,6 +1159,8 @@ class _Validator:
         if n.attr.startswith("_"):
             self.fail("private_access", "Private and dunder attributes are not allowed.")
         base = self.expr(n.value)
+        if base == "module:numpy" and n.attr == "nan":
+            return "value"
         if (
             base
             in {
@@ -1041,9 +1182,14 @@ class _Validator:
             )
         if base == "axes" and n.attr in {"xaxis", "yaxis"}:
             return "axis"
+        if base == "axes" and n.attr == "spines":
+            return "spines"
         if base == "artist" and n.attr in {"figure", "fig"}:
             return "figure"
-        self.fail("attribute", "Attribute access is not an approved capability.")
+        self.fail(
+            "attribute",
+            f"Attribute .{n.attr} at generated line {n.lineno} is not an approved capability.",
+        )
 
     def call(self, n):
         if any(isinstance(a, ast.Starred) for a in n.args):
@@ -1055,7 +1201,7 @@ class _Validator:
                 self.expr(keyword.value)
             if n.func.id not in _BUILTINS:
                 self.fail("call", "Calls must resolve to an approved capability.")
-            if n.func.id == "range" and (
+            if n.func.id == "range" and not self.data_sized_range(n) and (
                 len(n.args) > 3
                 or any(
                     not isinstance(x, ast.Constant)
@@ -1069,6 +1215,8 @@ class _Validator:
                 return "axes_sequence"
             if n.func.id == "range" and self.bounded_range(n):
                 return "bounded_sequence"
+            if n.func.id == "range" and self.data_sized_range(n):
+                return "sequence"
             bounded_kinds = {"bounded_column", "bounded_sequence"}
             if n.func.id == "zip" and any(kind in bounded_kinds for kind in arg_kinds):
                 return "bounded_sequence"
@@ -1135,6 +1283,10 @@ class _Validator:
             self.expr(keyword.value)
         self.validate_resources(base, attr, n)
         if base == "module:numpy" and attr in _RESOURCE_NUMPY:
+            if attr == "arange" and self.bounded_arange(n):
+                return "bounded_sequence"
+            if attr == "arange" and self.data_sized_range(n):
+                return "data"
             self.fail(
                 "resource_limit",
                 "This NumPy allocation or expansion API is outside the safe plotting subset.",
@@ -1155,16 +1307,25 @@ class _Validator:
         if base == "module:matplotlib.dates" and attr in _DATES:
             return "artist"
         if base == "module:matplotlib.pyplot" and attr in _PYPLOT:
-            return (
-                "figure_axes"
-                if attr in {"subplots", "subplot_mosaic"}
-                else "figure"
-                if attr == "figure"
-                else "artist"
-            )
+            if attr == "subplots":
+                return (
+                    "figure_axes_sequence"
+                    if self.subplot_result(n) == "axes_sequence"
+                    else "figure_axes"
+                )
+            if attr == "subplot_mosaic":
+                return "figure_axes"
+            return "figure" if attr == "figure" else "artist"
         if base == "module:seaborn" and attr in _SEABORN:
             return "artist"
         if base in {"bounded_column", "bounded_data", "data"} and attr in _DATA_METHODS:
+            if attr == "iterrows":
+                if base == "bounded_data" and not n.args and not n.keywords:
+                    return "bounded_sequence"
+                self.fail(
+                    "resource_limit",
+                    "iterrows() requires a DataFrame explicitly capped with head(N) or tail(N).",
+                )
             if attr in {"head", "tail"} and self.bounded_head_or_tail(n):
                 return "bounded_column" if base == "bounded_column" else "bounded_data"
             if base in {"bounded_column", "bounded_data"} and attr in {
@@ -1180,7 +1341,12 @@ class _Validator:
                 return base
             return "data"
         if base == "figure" and attr in _FIGURE:
-            return "axes" if attr in {"add_axes", "add_subplot", "subplots"} else "artist"
+            if attr == "subplots":
+                return self.subplot_result(n)
+            return "axes" if attr in {"add_axes", "add_subplot"} else "artist"
+        if base == "value" and attr == "startswith" and len(n.args) == 1 and not n.keywords:
+            if isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str):
+                return "value"
         if base == "axes" and attr == "set":
             names = {keyword.arg for keyword in n.keywords}
             if n.args or None in names or not names <= _SAFE_AXES_SET_KEYWORDS:
@@ -1214,7 +1380,11 @@ class _Validator:
             return "artist"
         if base in {"bounded_sequence", "sequence"} and attr in _SEQUENCE_METHODS:
             return "value"
-        self.fail("call", "Call target is not in the approved capability manifest.")
+        self.fail(
+            "call",
+            f"Call to .{attr}() at generated line {n.lineno} is not in the approved "
+            "capability manifest.",
+        )
 
 
 def validate_code(code: str, backend: str) -> ast.Module:
@@ -1245,7 +1415,10 @@ def execute(code, data, *, backend, title=None, figsize=None):
     permitted = allowed_imports(backend)
 
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if level or name not in permitted:
+        numpy_internal = name in {"numpy._core._methods", "numpy.core._methods"}
+        # NumPy's ndarray reductions import this module lazily through the calling
+        # function's builtins. The AST still forbids generated source from importing it.
+        if level or name not in permitted and not numpy_internal:
             raise ImportError("Import is not permitted.")
         return builtins.__import__(name, globals, locals, fromlist, level)
 
@@ -1275,9 +1448,13 @@ def execute(code, data, *, backend, title=None, figsize=None):
             if trace.tb_frame.f_code.co_filename == "<augplot-generated>":
                 line = trace.tb_lineno
             trace = trace.tb_next
+        detail = "Scatter x and y must have the same number of values." if (
+            isinstance(exc, ValueError) and str(exc) == "x and y must be the same size"
+        ) else None
         raise GenerationError(
             f"Plot execution failed ({type(exc).__name__})"
-            + (f" at generated line {line}." if line else "."),
+            + (f" at generated line {line}." if line else ".")
+            + (f" {detail}" if detail else ""),
             code=code,
         ) from None
     finally:

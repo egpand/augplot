@@ -11,8 +11,9 @@ import augplot as ap
 plt = ap.plot(data, prompt="Plot revenue by channel")
 ```
 
-`ap.plot()` accepts Pandas objects, NumPy arrays, lists, and nested dictionaries. It
-returns the current Augplot chart object and displays its figure by default.
+`ap.plot()` accepts Pandas objects, one- or two-dimensional NumPy arrays, lists, tuples,
+and nested dictionaries. It returns the current Augplot chart object and displays its
+figure by default.
 
 ```python
 plt = ap.plot(

@@ -10,7 +10,7 @@ from augplot.prompts import (
 def test_prompt_has_explicit_sections_and_scope_boundary():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "10"
+    assert PROMPT_VERSION == "14"
     for heading in (
         "# Core role and scope",
         "# Trust boundaries",
@@ -41,6 +41,8 @@ def test_prompt_describes_validator_compatibility_without_a_bypass():
     assert "concatenate or stack collections" in prompt
     assert "loop may iterate over the bounded Axes sequence" in prompt
     assert "columns selected from data explicitly capped with `head(N)`" in prompt
+    assert "data.head(N).iterrows()" in prompt
+    assert "Do not assign object attributes such as `series.index`" in prompt
     assert "or `tail(N)`" in prompt
     assert "where `N` is at most 200" in prompt
     assert "put the Axes sequence first when styling panels" in prompt
@@ -95,3 +97,8 @@ def test_cross_validation_guidance_is_conditional():
     assert CROSS_VALIDATION_GUIDANCE not in ordinary
     assert CROSS_VALIDATION_GUIDANCE in cv_prompt
     assert "does not establish statistical significance" in cv_prompt
+    assert 'np.mean(data[name]["test_f1"])' in cv_prompt
+    assert "np.arange(len(names))" in cv_prompt
+    assert "a scalar model position cannot be paired with a multi-value fold array" in (
+        " ".join(cv_prompt.split())
+    )
