@@ -128,6 +128,19 @@ def test_repair_once_and_sanitize_diagnostics(fake_model):
     assert "SECRET_RAW_VALUE" not in diagnostic["diagnostic"]
 
 
+def test_repair_receives_validator_reason(fake_model):
+    rejected = ARRAY_CODE.replace("ax.plot(data)", 'fig.savefig("plot.png")')
+    calls = fake_model(response(rejected), response(ARRAY_CODE))
+
+    assert plot([1, 2], show=False).figure is not None
+    assert len(calls) == 2
+    retry = calls[1]["messages"]
+    assert json.loads(retry[-2]["content"])["code"] == rejected
+    diagnostic = json.loads(retry[-1]["content"])["diagnostic"]
+    assert ".savefig" in diagnostic
+    assert "generated line 4" in diagnostic
+
+
 def test_repair_receives_safe_scatter_shape_hint(fake_model):
     bad = ARRAY_CODE.replace("ax.plot(data)", "ax.scatter(0, data)")
     calls = fake_model(response(bad), response(ARRAY_CODE))
