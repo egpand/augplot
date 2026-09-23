@@ -40,6 +40,11 @@ viz.to_python(function_name="plot_monthly_passengers")
 Open or download the [example notebook](examples/quickstart.ipynb) to try the complete
 workflow.
 
+For nested cross-validation results, try the
+[model comparison notebook](examples/cross-validation-model-comparison.ipynb). It starts
+with an inline results dictionary, successive refinements, and an intentional
+`ScopeError` example.
+
 ## What can `data` be?
 
 `ap.plot(data)` accepts these nonempty, in-memory Python objects:

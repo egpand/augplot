@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from threading import Event
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -126,6 +127,64 @@ def test_repair_once_and_sanitize_diagnostics(fake_model):
     diagnostic = json.loads(calls[1]["messages"][-1]["content"])
     assert "ValueError" in diagnostic["diagnostic"]
     assert "SECRET_RAW_VALUE" not in diagnostic["diagnostic"]
+
+
+def test_slow_generation_reports_attempts_and_waiting(monkeypatch):
+    from augplot import core, provider
+
+    waiting_printed = Event()
+    messages = []
+    calls = []
+    rejected = ARRAY_CODE.replace("ax.plot(data)", 'fig.savefig("plot.png")')
+
+    def capture(message, *, flush):
+        assert flush is True
+        messages.append(message)
+        if "still waiting" in message:
+            waiting_printed.set()
+
+    def complete(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            assert waiting_printed.wait(2)
+            return response(rejected)
+        return response(ARRAY_CODE)
+
+    monkeypatch.setattr(core, "_PROGRESS_DELAY_SECONDS", 0.001)
+    monkeypatch.setattr(core, "print", capture, raising=False)
+    monkeypatch.setattr(provider, "complete", complete)
+    monkeypatch.setenv("AUGPLOT_MODEL", "test/fake-model")
+
+    assert plot([1, 2], cache_dir=None, show=False).figure is not None
+    assert len(calls) == 2
+    assert messages == [
+        "Augplot: plotting... attempt 1/2",
+        "Augplot: still waiting for the model (attempt 1/2)...",
+        "Augplot: checking generated plotting code...",
+        "Augplot: repairing... attempt 2/2",
+        "Augplot: checking generated plotting code...",
+    ]
+
+
+@pytest.mark.parametrize("max_repairs", [0, 1])
+def test_quick_generation_reports_attempt_and_history_replay_is_quiet(
+    fake_model, monkeypatch, max_repairs
+):
+    from augplot import core
+
+    messages = []
+    monkeypatch.setattr(core, "print", lambda *args, **kwargs: messages.append(args), raising=False)
+    calls = fake_model(response(ARRAY_CODE))
+
+    plot([1, 2], max_repairs=max_repairs, show=False)
+    replay = plot([1, 2], max_repairs=max_repairs, show=False)
+
+    assert replay.cache_hit
+    assert len(calls) == 1
+    assert messages == [
+        (f"Augplot: plotting... attempt 1/{max_repairs + 1}",),
+        ("Augplot: checking generated plotting code...",),
+    ]
 
 
 def test_repair_receives_validator_reason(fake_model):
