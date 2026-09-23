@@ -11,7 +11,7 @@ All notable changes to Augplot are documented in this file.
   without method-by-method approval.
 - Keep checks for imports, file and network access, subprocess and dynamic execution,
   reflection, active rendering options, and obvious resource bombs.
-- Refresh generation guidance and invalidate cached code accepted under the old policy.
+- Shorten generation guidance and invalidate cached code accepted under the old policy.
 
 ## [0.1.1] - 2026-09-23
 
