@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "augplot"
-version = "0.1.0"
+version = "0.1.1"
 description = "Turn notebook data into visualizations and reusable Python with an LLM."
 readme = "README.md"
 license = "Apache-2.0"
