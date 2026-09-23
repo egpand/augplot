@@ -10,7 +10,7 @@ from augplot.prompts import (
 def test_prompt_is_short_and_keeps_the_workflow_contract():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "16"
+    assert PROMPT_VERSION == "17"
     assert len(SYSTEM_PROMPT) < 3_000
     assert "plot_data(data, *, title=None, figsize=None)" in prompt
     assert "Return only JSON" in prompt
@@ -21,6 +21,10 @@ def test_prompt_is_short_and_keeps_the_workflow_contract():
     assert "Do not access files, URLs, the network, subprocesses" in prompt
     assert "Keep static allocations and plot layouts modest" in prompt
     assert "Adjust size and layout to prevent overlap" in prompt
+    assert "Reserve space for long category labels, legends, and explanatory notes" in prompt
+    assert "Place value labels clear of error bars and other marks" in prompt
+    assert "optional annotations cannot fit legibly, omit them" in prompt
+    assert "text does not cover plotted data or get clipped" in prompt
 
 
 def test_response_format_is_a_strict_unified_schema():

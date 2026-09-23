@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "16"
+PROMPT_VERSION = "17"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -78,6 +78,10 @@ scales; state aggregation and uncertainty honestly. Emphasize the requested obse
 category, or aggregate without hiding data. Keep colors restrained and text, ticks,
 annotations, legends, and panels readable. Adjust size and layout to prevent overlap;
 keep requested information visible. Use legends for repeated encodings.
+Reserve space for long category labels, legends, and explanatory notes. Place value
+labels clear of error bars and other marks. If optional annotations cannot fit legibly,
+omit them. Check the layout before returning code so text does not cover plotted data
+or get clipped.
 """
 
 CROSS_VALIDATION_GUIDANCE = """# Conditional domain guidance: cross-validation results
