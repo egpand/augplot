@@ -12,6 +12,9 @@ All notable changes to Augplot are documented in this file.
 - Keep checks for imports, file and network access, subprocess and dynamic execution,
   reflection, active rendering options, and obvious resource bombs.
 - Shorten generation guidance and invalidate cached code accepted under the old policy.
+- Report generation and repair progress, including a notice after 20 seconds of waiting.
+- Improve chart guidance for titles, legends, labels, uncertainty notes, and spacing.
+- Refresh the quickstart notebook and add an anonymized cross-validation walkthrough.
 
 ## [0.1.1] - 2026-09-23
 
