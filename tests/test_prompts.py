@@ -10,7 +10,7 @@ from augplot.prompts import (
 def test_prompt_is_short_and_keeps_the_workflow_contract():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "18"
+    assert PROMPT_VERSION == "23"
     assert len(SYSTEM_PROMPT) < 3_000
     assert "plot_data(data, *, title=None, figsize=None)" in prompt
     assert "Return only JSON" in prompt
@@ -23,9 +23,11 @@ def test_prompt_is_short_and_keeps_the_workflow_contract():
     assert "Do not access files, URLs, the network, subprocesses" in prompt
     assert "Keep static allocations and plot layouts modest" in prompt
     assert "Adjust size and layout to prevent overlap" in prompt
-    assert "Never place a legend over bars, error bars, or data labels" in prompt
-    assert "put the legend outside and reserve enough figure margin" in prompt
-    assert "Reserve space for long category labels, legends, and explanatory notes" in prompt
+    assert "Make the main title visibly larger than axis labels and ticks" in prompt
+    assert "Never place a legend over bars, error bars, data labels, or the title" in prompt
+    assert "compact margin beside/below the axes, never above them" in prompt
+    assert "Reserve only the space needed for long category labels, legends, and notes" in prompt
+    assert "avoid large empty gaps" in prompt
     assert "Place value labels clear of error bars and other marks" in prompt
     assert "optional annotations cannot fit legibly, omit them" in prompt
     assert "text does not cover plotted data or get clipped" in prompt
@@ -52,4 +54,6 @@ def test_cross_validation_guidance_is_short_and_conditional():
     assert CROSS_VALIDATION_GUIDANCE not in ordinary
     assert CROSS_VALIDATION_GUIDANCE in cv_prompt
     assert 'np.mean(data[name]["test_f1"])' in cv_prompt
+    assert 'call fold-variation marks "error bars" and name the statistic' in cv_prompt
+    assert "place it just beneath the legend with a small gap" in " ".join(cv_prompt.split())
     assert "does not establish statistical significance" in cv_prompt

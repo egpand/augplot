@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "18"
+PROMPT_VERSION = "23"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -75,25 +75,27 @@ Keep static allocations and plot layouts modest.
 
 # Figure quality
 
-Choose a chart that shows the requested relationship. Use accurate labels, units and
-scales; state aggregation and uncertainty honestly. Emphasize the requested observation,
-category, or aggregate without hiding data. Keep colors restrained and text, ticks,
-annotations, legends, and panels readable. Adjust size and layout to prevent overlap;
-keep requested information visible. Use legends for repeated encodings.
-Never place a legend over bars, error bars, or data labels. If there is no clear space
-inside the axes, put the legend outside and reserve enough figure margin for it.
-Reserve space for long category labels, legends, and explanatory notes. Place value
-labels clear of error bars and other marks. If optional annotations cannot fit legibly,
-omit them. Check the layout before returning code so text does not cover plotted data
-or get clipped.
+Use accurate labels, units and scales; state aggregation and uncertainty honestly.
+Emphasize requested observations, categories, or aggregates without hiding data.
+Keep colors restrained and text readable. Make the main title visibly larger than axis
+labels and ticks. Adjust size and layout to prevent overlap; use legends for repeated
+encodings.
+Never place a legend over bars, error bars, data labels, or the title. Put it in clear
+axes space or a compact margin beside/below the axes, never above them. Reserve only
+the space needed for long category labels, legends, and notes; avoid large empty gaps.
+Place value labels clear of error bars and other marks. If optional annotations cannot
+fit legibly, omit them. Check the layout before returning code so text does not cover
+plotted data or get clipped.
 """
 
 CROSS_VALIDATION_GUIDANCE = """# Conditional domain guidance: cross-validation results
 
 For nested result dictionaries keyed by model, compute from full `data`, for example
 `means = [np.mean(data[name]["test_f1"]) for name in data]`. Use only supplied metrics.
-Keep timing separate from scores, show fold variation when useful, and name the error
-statistic. A highest observed score does not establish statistical significance.
+Keep timing separate from scores and show fold variation when useful. For bar or point
+charts, call fold-variation marks "error bars" and name the statistic. If an uncertainty
+note accompanies a legend below the chart, place it just beneath the legend with a
+small gap. A highest observed score does not establish statistical significance.
 When plotting raw folds, give scatter x and y arrays equal lengths.
 """
 
