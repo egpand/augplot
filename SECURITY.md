@@ -2,12 +2,13 @@
 
 ## Supported versions
 
-Augplot is currently in beta. Security fixes are provided for the latest `0.1.x`
+Augplot is currently in beta. Security fixes are provided for the latest `0.2.x`
 release and the `main` branch.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | Yes |
+| 0.2.x | Yes |
+| 0.1.x | No |
 | Earlier versions | No |
 
 ## Reporting a vulnerability

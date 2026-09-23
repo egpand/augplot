@@ -2,6 +2,24 @@
 
 All notable changes to Augplot are documented in this file.
 
+## [0.2.0] - 2026-09-23
+
+### Changed
+
+- Replace the plotting capability manifest with a smaller security-focused validator.
+  Common Pandas/NumPy transformations, local assignments, and data-sized loops now work
+  without method-by-method approval.
+- Keep checks for imports, file and network access, subprocess and dynamic execution,
+  reflection, active rendering options, and obvious resource bombs.
+- Refresh generation guidance and invalidate cached code accepted under the old policy.
+
+## [0.1.1] - 2026-09-23
+
+### Changed
+
+- Broaden guarded plotting compatibility for timeline annotations, axis styling,
+  data-sized positions, and additional Pandas and NumPy data shapes.
+
 ## [0.1.0] - 2026-09-22
 
 Initial beta release.

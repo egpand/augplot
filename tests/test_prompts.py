@@ -10,7 +10,7 @@ from augplot.prompts import (
 def test_prompt_has_explicit_sections_and_scope_boundary():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "14"
+    assert PROMPT_VERSION == "15"
     for heading in (
         "# Core role and scope",
         "# Trust boundaries",
@@ -31,23 +31,13 @@ def test_prompt_has_explicit_sections_and_scope_boundary():
 def test_prompt_describes_validator_compatibility_without_a_bypass():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert "independent default-deny validator" in prompt
+    assert "independent security validator" in prompt
     assert "must not attempt to bypass validation" in prompt
-    assert "Never call Pandas `plot` or `hist`" in prompt
-    assert "`apply`, `agg`, `aggregate`, `map`, or `transform`" in prompt
-    assert "Do not use generic `set` methods or indirect call targets" in prompt
-    assert "backend, file or path, URL, font-file, picker, `usetex`" in prompt
-    assert "`zeros`, `ones`, `full`, or `repeat`" in prompt
-    assert "concatenate or stack collections" in prompt
-    assert "loop may iterate over the bounded Axes sequence" in prompt
-    assert "columns selected from data explicitly capped with `head(N)`" in prompt
-    assert "data.head(N).iterrows()" in prompt
-    assert "Do not assign object attributes such as `series.index`" in prompt
-    assert "or `tail(N)`" in prompt
-    assert "where `N` is at most 200" in prompt
-    assert "put the Axes sequence first when styling panels" in prompt
-    assert "Nested loops and nested comprehensions are not allowed" in prompt
-    assert "return `out_of_scope`" in prompt
+    assert "Pandas grouping and aggregation" in prompt
+    assert "loops, comprehensions, and Matplotlib artist methods are available" in prompt
+    assert "Do not use files, URLs, network access, subprocesses" in prompt
+    assert "Do not pass strings that name arbitrary methods" in prompt
+    assert "`out_of_scope`, briefly identify the required upstream inputs" in prompt
 
 
 def test_response_format_is_a_strict_unified_schema():

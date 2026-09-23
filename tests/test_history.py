@@ -12,6 +12,7 @@ import pytest
 from conftest import ARRAY_CODE, CV_CODE, response
 
 from augplot import ConfigurationError, GenerationError, plot
+from augplot.execution import VALIDATOR_VERSION
 from augplot.history import fingerprint
 
 
@@ -162,6 +163,19 @@ def test_corrupt_history_fails_without_inference(fake_model):
     assert plot([1, 2], regenerate=True, show=False).figure is not None
 
 
+def test_saved_history_records_and_checks_validator_version(fake_model):
+    fake_model(response(ARRAY_CODE))
+    viz = plot([1, 2], show=False)
+    lookup = next(path for path in viz.history_path.parent.glob("*.json") if len(path.stem) == 64)
+    record = json.loads(lookup.read_text())
+    assert record["validator_version"] == VALIDATOR_VERSION
+
+    record["validator_version"] -= 1
+    lookup.write_text(json.dumps(record))
+    with pytest.raises(ConfigurationError, match="regenerate=True"):
+        plot([1, 2], show=False)
+
+
 def test_cached_execution_failure_does_not_call_model(fake_model, monkeypatch):
     calls = fake_model(response(ARRAY_CODE))
     plot([1, 2], show=False)
@@ -198,7 +212,7 @@ def test_recomputed_checksum_does_not_trust_malicious_cached_source(fake_model):
         ('frame.plot(url="javascript:alert(1)")', "dangerous_keyword"),
     ],
 )
-def test_recomputed_checksum_cannot_trust_new_manifest_bypasses(
+def test_recomputed_checksum_cannot_trust_security_bypasses(
     fake_model, operation, rule
 ):
     calls = fake_model(response(ARRAY_CODE))

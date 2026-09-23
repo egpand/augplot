@@ -135,7 +135,7 @@ but does not train models or return predictions, forecasts, or other analytical 
 
 ## Beta and security
 
-Augplot 0.1.1 is a beta release; APIs and saved-history formats may change before 1.0.
+Augplot 0.2.0 is a beta release; APIs and saved-history formats may change before 1.0.
 Review generated code before sensitive or security-critical use, and report
 vulnerabilities through the [security policy](SECURITY.md).
 
