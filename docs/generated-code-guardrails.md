@@ -10,15 +10,27 @@ Generated code must define exactly `plot_data(data, *, title=None, figsize=None)
 return a figure it created. It may use the approved, in-memory parts of NumPy, Pandas,
 Matplotlib, and Seaborn. This includes common chart types, subplot layouts, axes, legends,
 artists, ticks, date formatters, and supported data transformations.
+Nested dictionaries and JSON-like records remain valid inputs. For cross-validation
+results keyed by model name, generated code can derive values with a single comprehension,
+such as `[np.mean(data[name]["test_f1"]) for name in data]`.
 
 Imports use fixed aliases: `np`, `pd`, `plt`, `ticker`, `dates`, and `sns`.
 Every call and attribute path is checked, and figures, axes, artists, and data-derived
 values are tracked so that a valid object cannot be substituted with an arbitrary callable.
 
-Loops are limited to approved Axes collections, small static sequences, or columns selected
-from data explicitly bounded to at most 200 rows with `head` or `tail`. This supports panel
-styling and per-record chart annotations without permitting unbounded or nested generated
-loops.
+Loops are limited to approved Axes collections, small static sequences, or data explicitly
+bounded to at most 200 rows with `head` or `tail`. Bounded columns and
+`data.head(20).iterrows()` support per-record chart annotations. Unbounded row iteration
+and nested generated loops remain rejected.
+One-dimensional Axes collections from a fixed-size `subplots` call can be iterated directly.
+A list slice such as `names = list(data)[:200]` also provides a bounded sequence; a
+matching `np.arange(len(names))` may position its marks.
+An array extent stored in a local name, such as `column_count = values.shape[1]`, may
+also be used to position marks with `np.arange(column_count)`; it does not authorize an
+unbounded Python annotation loop.
+Simple layout values can be assigned in both branches of a conditional, including a
+default `figsize`. A bounded loop over the four Matplotlib spines may hide them for
+minimal timeline styling.
 
 The generation prompt summarizes the validator's main constraints so a provider is less
 likely to emit code that needs repair. This is compatibility guidance only: the prompt is
@@ -45,14 +57,15 @@ plt.imsave("chart.png", data)
 
 Fresh model output receives at most the configured repair attempt (`max_repairs=1` by
 default). The repair request contains a sanitized validation diagnostic, never a runtime
-exception message or data values. If it still fails, `ap.plot()` raises
+exception message or data values. A recognized scatter length mismatch produces a
+data-free hint so the model can repair the x and y arrays. If it still fails, `ap.plot()` raises
 `GenerationError`; rejected source is never executed, displayed, exported, or saved.
 
 ```python
 try:
     viz = ap.plot(data, prompt="...")
 except ap.GenerationError as exc:
-    print(exc)             # concise reason
+    print(exc)             # reason, with the rejected name or method and line when known
     print(exc.violations)  # structured validation failures
     print(exc.code)        # inspect only when appropriate
 ```

@@ -17,10 +17,14 @@ _SCALARS = (str, bool, int, float, dt.date, dt.timedelta, np.generic)
 def validate_data(data):
     """Reject cycles/custom objects before copying or inspecting their representations."""
     if not isinstance(data, (dict, list, tuple, np.ndarray, pd.DataFrame, pd.Series)):
-        raise DataError("Expected a dictionary, record list, NumPy array, DataFrame, or Series.")
+        raise DataError("Expected a dictionary, list, tuple, NumPy array, DataFrame, or Series.")
     if isinstance(data, np.ndarray) and data.ndim not in (1, 2):
         raise DataError("Only one- and two-dimensional NumPy arrays are supported.")
-    if len(data) == 0 or isinstance(data, pd.DataFrame) and data.empty:
+    if (
+        len(data) == 0
+        or isinstance(data, np.ndarray) and data.size == 0
+        or isinstance(data, pd.DataFrame) and data.empty
+    ):
         raise DataError("Cannot visualize empty data.")
 
     def visit(value, ancestors, depth):

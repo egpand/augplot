@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -49,7 +50,20 @@ def test_duplicate_columns_and_nonstring_keys():
     assert profile_data({("score", 1): [1, 2]})["data"]["items"][0]["key"] == ["score", 1]
 
 
-@pytest.mark.parametrize("data", [[], {}, np.zeros((2, 2, 2)), object(), {"a": object()}])
+@pytest.mark.parametrize(
+    "data",
+    [
+        [],
+        {},
+        np.zeros((2, 2, 2)),
+        object(),
+        {"a": object()},
+        '[{"x": 1}]',
+        Path("results.json"),
+        iter([1, 2]),
+        pd.Index([1, 2]),
+    ],
+)
 def test_unsupported_or_empty_data(data):
     with pytest.raises(DataError):
         profile_data(data)
@@ -72,7 +86,9 @@ def test_never_calls_custom_repr():
         profile_data(pd.DataFrame({"value": [Custom()]}))
 
 
-@pytest.mark.parametrize("data", [np.array(1), pd.DataFrame(index=[1, 2])])
+@pytest.mark.parametrize(
+    "data", [np.array(1), np.empty((2, 0)), pd.DataFrame(index=[1, 2])]
+)
 def test_degenerate_shapes_raise_data_error(data):
     with pytest.raises(DataError):
         profile_data(data)

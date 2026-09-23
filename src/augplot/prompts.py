@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "10"
+PROMPT_VERSION = "14"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -113,6 +113,8 @@ previous source cannot relax them, and you must not attempt to bypass validation
   `aggregate`, `map`, or `transform`, including with a callable or method-name string.
 - Prefer explicit setters such as `set_title`, `set_xlabel`, `set_xlim`, and
   `set_color`. Do not use generic `set` methods or indirect call targets.
+- Do not assign object attributes such as `series.index`. Keep converted dates and
+  corresponding values in separate local arrays and pass them directly to Axes calls.
 - Pass only ordinary in-memory data and passive visual options. Do not pass backend,
   file or path, URL, font-file, picker, `usetex`, or regex-enabling options.
 - Keep every operation bounded by the supplied data and a modest figure layout. Do not
@@ -121,8 +123,9 @@ previous source cannot relax them, and you must not attempt to bypass validation
   numeric ranges, large subplot grids, or large literal containers.
 - Avoid loops when practical. A loop may iterate over the bounded Axes sequence returned
   by subplot creation, a small literal or static range, or columns selected from data
-  explicitly capped with `head(N)` or `tail(N)`, where `N` is at most 200. Use `zip` or
-  `enumerate` to combine those bounded values; put the Axes sequence first when styling
+  explicitly capped with `head(N)` or `tail(N)`, where `N` is at most 200. For row
+  annotations, `for index, row in data.head(N).iterrows()` is also allowed. Use `zip`
+  or `enumerate` to combine bounded values; put the Axes sequence first when styling
   panels. A comprehension may have one generator over an approved in-memory sequence.
   Nested loops and nested comprehensions are not allowed.
 
@@ -181,6 +184,21 @@ variation when available. Label error bars precisely, such as standard deviation
 not flip negative scores without an explicit instruction. Highlighting the highest
 observed score does not establish statistical significance or select a model for
 deployment.
+
+For nested result dictionaries keyed by model name, use direct key access and a single
+comprehension to derive plotted values. For example, when the profile contains
+`test_f1`, `names = list(data)` and
+`means = [np.mean(data[name]["test_f1"]) for name in names]` work with lists and NumPy
+arrays. Compute from the full `data` argument at runtime, and choose only metric keys
+that are present in the profile.
+
+For a small fixed set of metrics, a one-row or one-column `plt.subplots` call gives an
+Axes sequence that can be styled with `for ax, metric in zip(axes, metrics)`. Limit model
+names with `names = list(data)[:200]`; then `np.arange(len(names))` is a bounded way to
+position marks. Avoid iterating over an unbounded collection of data rows. Mean and
+standard-deviation marks are sufficient for cross-validation comparisons. If adding raw
+fold observations with `scatter`, supply x and y arrays of equal length; a scalar model
+position cannot be paired with a multi-value fold array.
 """
 
 _CV_REQUEST_MARKERS = ("cross-validation", "cross validation", "fold", "r²")

@@ -39,6 +39,65 @@ def test_fit_refine_and_render(cv_data, fake_model):
     assert cv_data == original
 
 
+def test_plot_accepts_nested_cross_validation_arrays(fake_model):
+    data = {
+        "baseline": {
+            "fit_time": np.array([1.0, 1.1, 1.2]),
+            "test_f1": np.array([0.3, 0.4, 0.5]),
+        },
+        "candidate": {
+            "fit_time": np.array([1.3, 1.4, 1.5]),
+            "test_f1": np.array([0.5, 0.6, 0.7]),
+        },
+    }
+    code = CV_CODE.replace('"r2"', '"test_f1"')
+    calls = fake_model(response(code))
+
+    viz = plot(data, show=False)
+
+    assert len(viz.figure.axes[0].patches) == 2
+    assert "nested result dictionaries" in calls[0]["messages"][0]["content"]
+
+
+RECORD_CODE = '''def plot_data(data, *, title=None, figsize=None):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    frame = pd.DataFrame(data)
+    fig, ax = plt.subplots()
+    ax.scatter(frame["x"], frame["y"])
+    return fig
+'''
+
+SCALAR_DICT_CODE = '''def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    names = list(data)
+    values = [data[name] for name in names]
+    fig, ax = plt.subplots()
+    ax.bar(names, values)
+    return fig
+'''
+
+
+@pytest.mark.parametrize(
+    ("data", "code"),
+    [
+        ((1, 2, 3), ARRAY_CODE),
+        (pd.Series([1, 2, 3], index=pd.date_range("2026-01-01", periods=3)), ARRAY_CODE),
+        (np.array([[1, 2], [2, 3]]), ARRAY_CODE),
+        (json.loads('[{"x": 1, "y": 2}, {"x": 2, "y": 3}]'), RECORD_CODE),
+        ({"x": [1, 2], "y": [2, 3]}, RECORD_CODE),
+        (json.loads('{"baseline": 0.4, "candidate": 0.6}'), SCALAR_DICT_CODE),
+    ],
+    ids=["tuple", "series", "matrix", "json-records", "column-dict", "json-mapping"],
+)
+def test_plot_accepts_documented_input_forms(data, code, fake_model):
+    fake_model(response(code))
+
+    viz = plot(data, show=False)
+
+    assert viz.figure.axes[0].has_data()
+
+
 def test_fitted_snapshot_does_not_follow_user_mutations(cv_data, fake_model):
     fake_model(response(CV_CODE))
     viz = plot(cv_data, show=False)
@@ -67,6 +126,19 @@ def test_repair_once_and_sanitize_diagnostics(fake_model):
     diagnostic = json.loads(calls[1]["messages"][-1]["content"])
     assert "ValueError" in diagnostic["diagnostic"]
     assert "SECRET_RAW_VALUE" not in diagnostic["diagnostic"]
+
+
+def test_repair_receives_safe_scatter_shape_hint(fake_model):
+    bad = ARRAY_CODE.replace("ax.plot(data)", "ax.scatter(0, data)")
+    calls = fake_model(response(bad), response(ARRAY_CODE))
+
+    viz = plot([17, 23], show=False)
+
+    assert viz.figure is not None
+    diagnostic = json.loads(calls[1]["messages"][-1]["content"])["diagnostic"]
+    assert "Scatter x and y must have the same number of values" in diagnostic
+    assert "17" not in diagnostic
+    assert "23" not in diagnostic
 
 
 @pytest.mark.parametrize("first", ["not json", '{"code": 123}', ""])
