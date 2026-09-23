@@ -1,83 +1,66 @@
 # Generated-code guardrails
 
-Augplot executes generated plotting code locally only after validating it against a
-default-deny capability manifest. This is defense in depth against unsafe provider output
-and prompt injection in data values or column names; it is not an operating-system sandbox.
+Augplot validates model-generated Python before running it in the notebook process.
+The 0.2.0 validator focuses on security-sensitive operations and obvious resource
+bombs. It is a defense-in-depth check, **not an operating-system sandbox**. Python
+libraries can have side effects that static checks cannot reliably identify.
 
-## What is permitted
+## Generated-code contract
 
-Generated code must define exactly `plot_data(data, *, title=None, figsize=None)` and
-return a figure it created. It may use the approved, in-memory parts of NumPy, Pandas,
-Matplotlib, and Seaborn. This includes common chart types, subplot layouts, axes, legends,
-artists, ticks, date formatters, and supported data transformations.
-Nested dictionaries and JSON-like records remain valid inputs. For cross-validation
-results keyed by model name, generated code can derive values with a single comprehension,
-such as `[np.mean(data[name]["test_f1"]) for name in data]`.
+Code defines one undecorated `plot_data(data, *, title=None, figsize=None)` function,
+imports approved plotting/data libraries inside it, and returns a Matplotlib Figure.
+The returned value is checked at runtime. Augplot passes a copy of the input data
+and closes figures opened during execution. Generated source may use ordinary Pandas
+and NumPy transformations, assignment to local data, loops, comprehensions, and
+Matplotlib or Seaborn plotting APIs. There is no chart-type or artist-method manifest.
 
-Imports use fixed aliases: `np`, `pd`, `plt`, `ticker`, `dates`, and `sns`.
-Every call and attribute path is checked, and figures, axes, artists, and data-derived
-values are tracked so that a valid object cannot be substituted with an arbitrary callable.
+## Security checks
 
-Loops are limited to approved Axes collections, small static sequences, or data explicitly
-bounded to at most 200 rows with `head` or `tail`. Bounded columns and
-`data.head(20).iterrows()` support per-record chart annotations. Unbounded row iteration
-and nested generated loops remain rejected.
-One-dimensional Axes collections from a fixed-size `subplots` call can be iterated directly.
-A list slice such as `names = list(data)[:200]` also provides a bounded sequence; a
-matching `np.arange(len(names))` may position its marks.
-An array extent stored in a local name, such as `column_count = values.shape[1]`, may
-also be used to position marks with `np.arange(column_count)`; it does not authorize an
-unbounded Python annotation loop.
-Simple layout values can be assigned in both branches of a conditional, including a
-default `figsize`. A bounded loop over the four Matplotlib spines may hide them for
-minimal timeline styling.
+The validator rejects:
 
-The generation prompt summarizes the validator's main constraints so a provider is less
-likely to emit code that needs repair. This is compatibility guidance only: the prompt is
-not trusted or relied upon for enforcement, and generated source must still pass the
-independent validator before execution.
-
-## What is rejected
-
-The validator rejects unknown or indirect call targets, module traversal, private or dunder
-attributes, alias shadowing, and `*args` or `**kwargs`. It also rejects filesystem,
-network, environment, subprocess, serialization, dynamic-execution, introspection, plot
-export, and backend-changing operations. Source, AST, literals, and static loop bounds are
-limited to keep validation and execution predictable.
+- Imports outside NumPy, Pandas, Matplotlib pyplot/ticker/dates, and Seaborn; Seaborn
+  imports also require a compatible backend.
+- File, network, subprocess, environment, serialization, and plot-export APIs,
+  including read/write/save methods and module-internal traversal.
+- Dynamic execution, indirect calls, private/dunder access, nested definitions,
+  reflection routes, and active rendering options such as external URLs or `usetex`.
+- Pandas string dispatch to arbitrary method names and explicit plotting-backend
+  selection. Simple aggregation names and direct safe NumPy functions are accepted.
+- Oversized source, ASTs, literals, numeric ranges, static array allocations,
+  subplot grids, figure dimensions, and format widths.
 
 For example, these are rejected before compilation:
 
 ```python
-pd.io.common.os.environ
-pd.io.common.urlopen("https://example.invalid")
-plt.imsave("chart.png", data)
+pd.read_csv("https://example.invalid/data.csv")
+frame.to_pickle("chart.pkl")
+fig.savefig("chart.png")
 ```
 
-## If validation fails
+The checks are intentionally modest. Data-sized loops and allocations are allowed,
+so a large input or expensive plotting operation can still use substantial CPU or
+memory. The AST rules reduce obvious side effects but cannot guarantee that every
+public third-party method is side-effect free. Do not use Augplot with sensitive data
+where executing model-produced Python is unacceptable.
+
+## Validation failures and saved plots
 
 Fresh model output receives at most the configured repair attempt (`max_repairs=1` by
-default). The repair request contains a sanitized validation diagnostic, never a runtime
-exception message or data values. A recognized scatter length mismatch produces a
-data-free hint so the model can repair the x and y arrays. If it still fails, `ap.plot()` raises
-`GenerationError`; rejected source is never executed, displayed, exported, or saved.
+default). The repair request contains a sanitized validation diagnostic, not data
+values or a runtime exception message. If repair fails, `ap.plot()` raises
+`GenerationError`; rejected source is not executed, displayed, exported, or saved.
 
 ```python
 try:
     viz = ap.plot(data, prompt="...")
 except ap.GenerationError as exc:
-    print(exc)             # reason, with the rejected name or method and line when known
-    print(exc.violations)  # structured validation failures
-    print(exc.code)        # inspect only when appropriate
+    print(exc)
+    print(exc.violations)
+    print(exc.code)
 ```
 
-Saved source is revalidated every time it is replayed. The capability-manifest version is
-part of both the cache identity and its metadata, so changing the approved capabilities
-cannot silently reuse code accepted under an older manifest. A cache checksum establishes
-file integrity, not trust. If saved code is rejected, Augplot does not execute it or make
-an automatic model request; use `regenerate=True` to explicitly request new code.
-
-## Remaining risk
-
-Validation substantially narrows what generated code can do, but does not isolate the
-Python process or make untrusted code generally safe. Do not use Augplot with sensitive
-data where executing model-produced Python is unacceptable.
+Saved source is revalidated on every replay. The validator version is part of the
+cache identity and metadata, so code accepted under an older policy is not silently
+reused. A cache checksum establishes file integrity, not trust. If saved code is
+rejected, Augplot does not make an automatic model request; use `regenerate=True`
+when you want new code.

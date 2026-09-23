@@ -3,14 +3,43 @@
 import json
 import os
 from pathlib import Path
+from threading import Event, Lock, Thread
 
 from . import provider
 from .errors import ConfigurationError, GenerationError
-from .execution import API_MANIFEST_VERSION, execute, parse_response
+from .execution import VALIDATOR_VERSION, execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
 from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, system_prompt_for
+
+_PROGRESS_DELAY_SECONDS = 20
+
+
+class _SlowRequestNotice:
+    """Report when one provider request has been pending for a while."""
+
+    def __init__(self, attempt, total):
+        self._done = Event()
+        self._lock = Lock()
+        self._message = (
+            f"Augplot: still waiting for the model (attempt {attempt}/{total})..."
+        )
+
+    def __enter__(self):
+        Thread(target=self._watch, daemon=True).start()
+        return self
+
+    def __exit__(self, *args):
+        with self._lock:
+            self._done.set()
+
+    def _watch(self):
+        if self._done.wait(_PROGRESS_DELAY_SECONDS):
+            return
+        with self._lock:
+            if not self._done.is_set():
+                print(self._message, flush=True)
 
 
 class _Visualization:
@@ -99,14 +128,20 @@ class _Visualization:
         ]
         last_error = None
         code = None
-        for attempt in range(self.max_repairs + 1):
-            response = provider.complete(
-                model=model,
-                messages=messages,
-                api_base=api_base,
-                timeout=self.timeout,
-                response_format=RESPONSE_FORMAT,
-            )
+        total_attempts = self.max_repairs + 1
+        for attempt in range(total_attempts):
+            number = attempt + 1
+            action = "plotting" if attempt == 0 else "repairing"
+            print(f"Augplot: {action}... attempt {number}/{total_attempts}", flush=True)
+            with _SlowRequestNotice(number, total_attempts):
+                response = provider.complete(
+                    model=model,
+                    messages=messages,
+                    api_base=api_base,
+                    timeout=self.timeout,
+                    response_format=RESPONSE_FORMAT,
+                )
+            print("Augplot: checking generated plotting code...", flush=True)
             try:
                 code, explanation = parse_response(response)
                 figure = execute(code, data, backend=self.backend)
@@ -140,7 +175,7 @@ class _Visualization:
         model, api_base = self._configuration()
         settings = {
             "history_version": HISTORY_VERSION,
-            "api_manifest_version": API_MANIFEST_VERSION,
+            "validator_version": VALIDATOR_VERSION,
             "prompt_version": PROMPT_VERSION,
             "data": data_hash,
             "model": model,

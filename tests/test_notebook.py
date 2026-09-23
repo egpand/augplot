@@ -77,7 +77,7 @@ provider.complete = offline_complete
         if cell.cell_type == "code":
             if cell.id == "augplot-02":
                 cell.source += (
-                    '\nassert os.environ["AUGPLOT_MODEL"] == "openai/gpt-5.6-terra"\n'
+                    '\nassert os.environ["AUGPLOT_MODEL"] == "openai/gpt-6-sol"\n'
                     'assert os.environ["OPENAI_API_KEY"] == "offline-test-key"'
                 )
             if cell.id == "augplot-10":

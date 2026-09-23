@@ -189,24 +189,15 @@ def test_backend_import_enforced():
         "fig.savefig('/tmp/never')",
     ],
 )
-def test_manifest_rejects_indirect_and_io_capabilities(statement):
+def test_security_validator_rejects_indirect_and_io_capabilities(statement):
     code = ARRAY_CODE.replace("ax.plot(data)", statement)
     with pytest.raises(GenerationError) as caught:
         validate_code(code, "auto")
     assert caught.value.violations
 
 
-def test_unknown_call_identifies_the_generated_method_and_line():
-    code = ARRAY_CODE.replace("ax.plot(data)", "data.unknown_method()")
-    with pytest.raises(GenerationError) as caught:
-        validate_code(code, "auto")
-    assert "unknown_method()" in str(caught.value)
-    assert "generated line 4" in str(caught.value)
-    assert caught.value.violations[0]["rule"] == "call"
-
-
 def test_generated_cross_validation_panels_work_with_bounded_model_names():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import numpy as np
     import matplotlib.pyplot as plt
     names = list(data)[:200]
@@ -233,7 +224,7 @@ def test_generated_cross_validation_panels_work_with_bounded_model_names():
             ax.set_yscale("log")
     fig.tight_layout()
     return fig
-'''
+"""
     data = {
         "baseline": {
             "test_accuracy": [0.95, 0.96, 0.97],
@@ -251,14 +242,16 @@ def test_generated_cross_validation_panels_work_with_bounded_model_names():
 
     assert len(figure.axes) == 3
     assert [axis.get_title() for axis in figure.axes] == [
-        "Accuracy", "F1 score", "Fit time (seconds)"
+        "Accuracy",
+        "F1 score",
+        "Fit time (seconds)",
     ]
     assert len(figure.axes[0].lines) > 0
     assert len(execute(code, {}, backend="matplotlib").axes[0].texts) == 1
 
 
 def test_generated_horizontal_cross_validation_panels_can_label_y_ticks():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import numpy as np
     import matplotlib.pyplot as plt
     names = list(data)[:200]
@@ -271,7 +264,7 @@ def test_generated_horizontal_cross_validation_panels_can_label_y_ticks():
         ax.set_yticks(positions)
         ax.set_yticklabels(names)
     return fig
-'''
+"""
     data = {
         "baseline": {"test_f1": [0.3, 0.4], "fit_time": [1.0, 1.1]},
         "candidate": {"test_f1": [0.5, 0.6], "fit_time": [1.2, 1.3]},
@@ -291,7 +284,7 @@ def test_numpy_arange_still_requires_a_proven_bounded_length():
 
 
 def test_data_sized_positions_and_axis_styling_from_live_generation():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import numpy as np
     import matplotlib.pyplot as plt
     values = np.asarray(data, dtype=float)
@@ -303,68 +296,35 @@ def test_data_sized_positions_and_axis_styling_from_live_generation():
         ax.axhline(values[valid].mean())
     ax.set_axisbelow(True)
     return fig
-'''
+"""
     figure = execute(code, [3, 4, 5], backend="matplotlib")
     assert len(figure.axes[0].collections) == 1
 
 
 def test_passive_figsize_value_can_be_initialized_in_a_branch():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt
     if figsize is None:
         figsize = (10, 5.5)
     fig, ax = plt.subplots(figsize=figsize)
     ax.plot(data)
     return fig
-'''
+"""
 
     figure = execute(code, [1, 2, 3], backend="matplotlib")
 
     assert tuple(figure.get_size_inches()) == (10, 5.5)
 
 
-def test_branch_merge_does_not_turn_data_into_a_bounded_loop():
-    code = '''def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    if title:
-        items = list(data)[:3]
-    else:
-        items = data
-    fig, ax = plt.subplots()
-    for item in items:
-        ax.text(0, 0, str(item))
-    return fig
-'''
-
-    assert_rejected_by(code, "resource_limit", backend="matplotlib")
-
-
-def test_series_index_assignment_is_rejected_with_actionable_location():
-    code = '''def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    series = data.dropna().copy()
-    series.index = series.index
-    fig, ax = plt.subplots()
-    ax.plot(series.index, series.to_numpy())
-    return fig
-'''
-
-    with pytest.raises(GenerationError) as caught:
-        validate_code(code, "matplotlib")
-
-    assert caught.value.violations[0]["rule"] == "mutation"
-    assert "Assignment to .index at generated line 4" in str(caught.value)
-
-
 def test_series_date_index_can_be_plotted_without_mutation():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import pandas as pd
     import matplotlib.pyplot as plt
     converted_index = pd.to_datetime(data.index, errors="coerce")
     fig, ax = plt.subplots()
     ax.plot(converted_index, data.to_numpy())
     return fig
-'''
+"""
     data = pd.Series([3, 5], index=["2026-01-01", "2026-01-02"])
 
     figure = execute(code, data, backend="matplotlib")
@@ -372,18 +332,8 @@ def test_series_date_index_can_be_plotted_without_mutation():
     assert len(figure.axes[0].lines) == 1
 
 
-def test_data_sized_position_range_is_allowed_without_unbounded_loop():
-    code = ARRAY_CODE.replace("ax.plot(data)", "ax.plot(list(range(len(data))), data)")
-    validate_code(code, "auto")
-    unbounded_loop = code.replace(
-        "ax.plot(list(range(len(data))), data)",
-        "for position in range(len(data)):\n        ax.text(position, 0, str(position))",
-    )
-    assert_rejected_by(unbounded_loop, "resource_limit")
-
-
 def test_aliased_array_column_extent_can_label_two_dimensional_plot():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import numpy as np
     import matplotlib.pyplot as plt
     values = np.asarray(data)
@@ -394,37 +344,24 @@ def test_aliased_array_column_extent_can_label_two_dimensional_plot():
     ax.plot(row_order, values)
     ax.legend(labels)
     return fig
-'''
+"""
 
     figure = execute(code, [[1, 2], [3, 4], [5, 6]], backend="matplotlib")
 
     assert len(figure.axes[0].lines) == 2
     assert [text.get_text() for text in figure.axes[0].get_legend().texts] == [
-        "Column 1", "Column 2"
+        "Column 1",
+        "Column 2",
     ]
 
 
-def test_arange_rejects_extent_name_after_arbitrary_reassignment():
-    code = '''def plot_data(data, *, title=None, figsize=None):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    column_count = data.shape[1]
-    column_count = 1000000
-    fig, ax = plt.subplots()
-    ax.plot(np.arange(column_count))
-    return fig
-'''
-
-    assert_rejected_by(code, "resource_limit", backend="matplotlib")
-
-
 def test_scatter_shape_error_reports_safe_repair_hint():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     ax.scatter(0, data)
     return fig
-'''
+"""
 
     with pytest.raises(GenerationError) as caught:
         execute(code, [17, 23], backend="matplotlib")
@@ -439,19 +376,6 @@ def test_numpy_arange_still_rejects_large_data_multipliers():
         "import matplotlib.pyplot as plt", "import numpy as np\n    import matplotlib.pyplot as plt"
     )
     assert_rejected_by(code, "resource_limit")
-
-
-def test_axes_iteration_rejects_mixed_capability_collections():
-    code = '''def plot_data(data, *, title=None, figsize=None):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    axes = [ax, np]
-    for item in axes:
-        item.plot(data)
-    return fig
-'''
-    assert_rejected_by(code, "provenance")
 
 
 @pytest.mark.parametrize(
@@ -567,51 +491,6 @@ def test_rejects_regex_enabled_data_transform():
     assert_rejected_by(code, "resource_limit")
 
 
-@pytest.mark.parametrize(
-    "body",
-    [
-        """candidate = data
-    if title:
-        candidate = data
-    else:
-        candidate = fig
-    candidate.mean()""",
-        """if title:
-        candidate = data
-    candidate.mean()""",
-        """values = [item for item in data]
-    item + 1""",
-    ],
-)
-def test_rejects_ambiguous_branch_and_comprehension_provenance(body):
-    code = f"""def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    {body}
-    return fig
-"""
-    assert_rejected_by(code, "provenance")
-
-
-def test_ambiguous_branch_reports_the_name_and_generated_line():
-    code = '''def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    if title:
-        candidate = data
-    else:
-        candidate = fig
-    candidate.mean()
-    return fig
-'''
-
-    with pytest.raises(GenerationError) as caught:
-        validate_code(code, "matplotlib")
-
-    assert caught.value.violations[0]["rule"] == "provenance"
-    assert "Name 'candidate' at generated line 8" in str(caught.value)
-
-
 def test_rejection_happens_before_dynamic_dispatch_side_effect(tmp_path):
     destination = tmp_path / "must-not-exist.pkl"
     code = f"""def plot_data(data, *, title=None, figsize=None):
@@ -680,7 +559,7 @@ def test_external_capability_attempts_remain_rejected(statement):
     assert caught.value.violations
 
 
-def test_manifest_accepts_tick_formatters_and_figure_level_seaborn():
+def test_security_validator_accepts_tick_formatters_and_figure_level_seaborn():
     ticks = ARRAY_CODE.replace(
         'ax.set_title(title or "Values")',
         'ax.xaxis.set_major_locator(ticker.MaxNLocator(5))\n    ax.set_title(title or "Values")',
@@ -699,7 +578,7 @@ def test_manifest_accepts_tick_formatters_and_figure_level_seaborn():
 
 
 @pytest.mark.parametrize("code", [PENGUIN_SCATTER, PENGUIN_FACETS, FLIGHTS_LINES, FLIGHTS_HEATMAP])
-def test_quickstart_generated_plot_corpus_passes_manifest(code):
+def test_quickstart_generated_plot_corpus_passes_validation(code):
     validate_code(code, "auto")
 
 
@@ -751,14 +630,14 @@ def test_supplied_titanic_timeline_fixture_renders_all_events():
 
 
 def test_supplied_timeline_can_hide_spines_with_bounded_style_loop():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     ax.plot(data)
     for spine in ["left", "top", "right", "bottom"]:
         ax.spines[spine].set_visible(False)
     return fig
-'''
+"""
 
     figure = execute(code, [1, 2, 3], backend="matplotlib")
 
@@ -766,34 +645,22 @@ def test_supplied_timeline_can_hide_spines_with_bounded_style_loop():
 
 
 def test_capped_dataframe_iterrows_can_annotate_timeline():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt
     events = data.sort_values("x").head(20)
     fig, ax = plt.subplots()
     for index, row in events.iterrows():
         ax.text(row["x"], 0, row["event"])
     return fig
-'''
+"""
 
     figure = execute(code, titanic_timeline_events(), backend="matplotlib")
 
     assert len(figure.axes[0].texts) == 11
 
 
-def test_uncapped_dataframe_iterrows_remains_rejected():
-    code = '''def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    for index, row in data.iterrows():
-        ax.text(row["x"], 0, row["event"])
-    return fig
-'''
-
-    assert_rejected_by(code, "resource_limit", backend="matplotlib")
-
-
 def test_same_capability_on_both_branches_can_annotate_a_row():
-    code = '''def plot_data(data, *, title=None, figsize=None):
+    code = """def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     for index, row in data.head(20).iterrows():
@@ -804,7 +671,7 @@ def test_same_capability_on_both_branches_can_annotate_a_row():
                 side = 1
             ax.text(row["x"], 0, str(side))
     return fig
-'''
+"""
 
     figure = execute(code, titanic_timeline_events(), backend="matplotlib")
 
@@ -851,51 +718,6 @@ def test_accepts_explicitly_bounded_column_iteration(bounded_call):
     validate_code(code, "matplotlib")
 
 
-@pytest.mark.parametrize(
-    "setup_and_loop",
-    [
-        "for item in data:\n        ax.text(0, 0, str(item))",
-        "rows = data.head(2)\n    for item in rows:\n        ax.text(0, 0, str(item))",
-        "rows = data.head(201)\n    for item in rows:\n        ax.text(0, 0, str(item))",
-        "rows = data.head(-1)\n    for item in rows:\n        ax.text(0, 0, str(item))",
-        (
-            'rows = data.head(2, n=2)\n    for item in rows["value"]:'
-            "\n        ax.text(0, 0, str(item))"
-        ),
-        "for item in range(201):\n        ax.text(0, 0, str(item))",
-        "for left, right in zip(data, data):\n        ax.text(0, 0, str(left))",
-    ],
-)
-def test_rejects_unbounded_data_annotation_loops(setup_and_loop):
-    code = f"""def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    {setup_and_loop}
-    return fig
-"""
-    assert_rejected_by(code, "resource_limit")
-
-
-def test_rejects_nested_bounded_annotation_loops():
-    code = """def plot_data(data, *, title=None, figsize=None):
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    rows = data.head(2)
-    values = rows["value"]
-    for outer in values:
-        for inner in values:
-            ax.text(0, 0, str(inner))
-    return fig
-"""
-    assert_rejected_by(code, "resource_limit")
-
-
-@pytest.mark.parametrize("label", ['f"{len(data)!r}"', 'f"{len(data):10000000}"'])
-def test_rejects_active_f_string_conversions_and_format_specs(label):
-    code = ARRAY_CODE.replace("ax.plot(data)", f"ax.text(0, 0, {label})")
-    assert_rejected_by(code, "format_string")
-
-
 def test_accepts_single_json_fence():
     code, explanation = parse_response("```json\n" + response(ARRAY_CODE) + "\n```")
     assert code == ARRAY_CODE
@@ -925,3 +747,99 @@ def test_parses_unified_out_of_scope_response():
     }
     with pytest.raises(ScopeError, match="upstream predictions"):
         parse_response(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "pd.DataFrame(data).to_clipboard()",
+        "np.genfromtxt('/etc/passwd')",
+        "plt.imread('/etc/passwd')",
+        "plt.imsave('/tmp/plot.png', data)",
+        "pd.ExcelWriter('/tmp/plot.xlsx')",
+        "fig.canvas.print_png('/tmp/plot.png')",
+        "ax.set_url('https://example.invalid')",
+        "data.query('value > 1')",
+        "pd.set_option('plotting.backend', 'attacker_module')",
+        "pd.DataFrame(data).to_gbq('dataset.table')",
+        "list(map(pd.DataFrame(data).apply, ['to_pickle']))",
+        "list(map(plot_data, data))",
+        "np.nan = 1",
+        "pd.DataFrame.plot = data",
+        "sns.get_dataset_names()",
+        "plt.setp(ax, 'usetex', True)",
+        "plt.get_current_fig_manager()",
+    ],
+)
+def test_file_and_escape_apis_are_rejected(statement):
+    code = ARRAY_CODE.replace(
+        "import matplotlib.pyplot as plt",
+        "import numpy as np\n    import pandas as pd\n    import seaborn as sns\n"
+        "    import matplotlib.pyplot as plt",
+    ).replace("ax.plot(data)", statement)
+    with pytest.raises(GenerationError) as caught:
+        validate_code(code, "auto")
+    assert caught.value.violations
+
+
+def test_common_pandas_aggregation_and_index_assignment_are_allowed():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    frame = pd.DataFrame(data).copy()
+    frame["scaled"] = frame["value"] * 2
+    summary = frame.groupby("group")["scaled"].agg("mean")
+    summary.index = summary.index.astype(str)
+    fig, ax = plt.subplots()
+    ax.bar(summary.index, summary.to_numpy())
+    return fig
+"""
+    figure = execute(code, {"group": ["a", "b", "a"], "value": [1, 2, 3]}, backend="matplotlib")
+    assert [patch.get_height() for patch in figure.axes[0].patches] == [4, 4]
+
+
+def test_series_map_with_local_label_mapping_is_allowed():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    labels = {"a": "Alpha", "b": "Beta"}
+    renamed = data["group"].map(labels)
+    fig, ax = plt.subplots()
+    ax.bar(renamed, data["value"])
+    return fig
+"""
+    figure = execute(
+        code, pd.DataFrame({"group": ["a", "b"], "value": [1, 2]}), backend="matplotlib"
+    )
+    assert [tick.get_text() for tick in figure.axes[0].get_xticklabels()] == ["Alpha", "Beta"]
+
+
+def test_data_sized_and_nested_annotation_loops_are_allowed():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.plot(data)
+    for index in range(len(data)):
+        for offset in (0, 1):
+            ax.text(index, data[index] + offset, f"{data[index]:.1f}")
+    return fig
+"""
+    figure = execute(code, [1.0, 2.0], backend="matplotlib")
+    assert len(figure.axes[0].texts) == 4
+
+
+def test_safe_numpy_allocation_and_render_keyword_are_allowed():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    baseline = np.zeros(len(data))
+    fig, ax = plt.subplots()
+    ax.fill_between(range(len(data)), baseline, data, color="skyblue")
+    return fig
+"""
+    figure = execute(code, [1, 3, 2], backend="matplotlib")
+    assert figure.axes[0].collections
+
+
+def test_huge_f_string_width_is_rejected():
+    code = ARRAY_CODE.replace("ax.plot(data)", 'ax.text(0, 0, f"{len(data):10000000}")')
+    assert_rejected_by(code, "format_string")

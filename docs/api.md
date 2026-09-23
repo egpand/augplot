@@ -48,6 +48,10 @@ plt = ap.plot(
 | `show` | Display the resulting figure in the notebook. |
 | `regenerate` | Request new code instead of replaying the matching saved step. |
 
+Fresh generations print the current attempt (`plotting` or `repairing`) and when returned
+code is checked. A request still waiting after 20 seconds prints another status line.
+Saved-history replays do not make model requests or print these progress messages.
+
 ## Refine the current chart
 
 ```python
