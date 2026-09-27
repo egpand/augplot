@@ -51,9 +51,10 @@ where executing model-produced Python is unacceptable.
 
 ## Validation failures and saved plots
 
-Fresh model output receives at most the configured repair attempt (`max_repairs=1` by
-default). The repair request contains a sanitized validation diagnostic, not data
-values or a runtime exception message. If repair fails, `ap.plot()` raises
+Fresh model output receives at most the configured number of repair attempts
+(`max_repairs=1` by default, or 2 for three total attempts). Each repair request
+contains a sanitized validation diagnostic, not data values or a runtime exception
+message. If repair fails, `ap.plot()` raises
 `GenerationError`. Rejected source is not executed, displayed, exported, or saved as
 visualization history. With history enabled, Augplot saves an `errors.json` summary and
 each rejected candidate under `.augplot/plots/<request-root>/failures/failure-*/` by

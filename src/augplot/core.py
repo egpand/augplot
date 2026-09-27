@@ -83,8 +83,8 @@ class _Visualization:
             raise ConfigurationError("sample_rows must be an integer between 0 and 100.")
         if not isinstance(max_profile_chars, int) or not 500 <= max_profile_chars <= 100_000:
             raise ConfigurationError("max_profile_chars must be between 500 and 100,000.")
-        if not isinstance(max_repairs, int) or max_repairs not in (0, 1):
-            raise ConfigurationError("max_repairs must be 0 or 1.")
+        if not isinstance(max_repairs, int) or max_repairs not in (0, 1, 2):
+            raise ConfigurationError("max_repairs must be 0, 1, or 2.")
         if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
             raise ConfigurationError("timeout must be a finite positive number of seconds.")
         self.model = model

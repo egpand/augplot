@@ -174,7 +174,7 @@ def test_slow_generation_reports_attempts_and_waiting(monkeypatch):
     ]
 
 
-@pytest.mark.parametrize("max_repairs", [0, 1])
+@pytest.mark.parametrize("max_repairs", [0, 1, 2])
 def test_quick_generation_reports_attempt_and_history_replay_is_quiet(
     fake_model, monkeypatch, max_repairs
 ):
@@ -230,6 +230,18 @@ def test_repair_explains_supported_replacements(fake_model, bad_statement, expec
     repair = json.loads(calls[1]["messages"][-1]["content"])
     assert expected_guidance in repair["guidance"]
     assert "Recheck the entire function" in repair["repair"]
+
+
+def test_two_repairs_are_available_as_opt_in(fake_model):
+    first = ARRAY_CODE.replace("ax.plot(data)", "data.agg(1)")
+    second = ARRAY_CODE.replace("ax.plot(data)", "data.agg(2)")
+    calls = fake_model(response(first), response(second), response(ARRAY_CODE))
+
+    viz = plot([1, 2], max_repairs=2, show=False)
+
+    assert viz.figure is not None
+    assert len(calls) == 3
+    assert viz.code == ARRAY_CODE
 
 
 def test_repair_receives_safe_scatter_shape_hint(fake_model):

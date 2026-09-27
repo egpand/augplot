@@ -43,7 +43,7 @@ plt = ap.plot(
 | `sample_rows` | Rows included in the model-facing profile, from 0 to 100. |
 | `max_profile_chars` | Maximum serialized profile size, from 500 to 100,000. |
 | `timeout` | Provider timeout in seconds. |
-| `max_repairs` | Whether invalid generated code gets zero or one repair request. |
+| `max_repairs` | Number of repair requests after the initial attempt: 0, 1 (default), or 2. |
 | `cache_dir` | Visualization-history directory; `None` disables persistence. |
 | `show` | Display the resulting figure in the notebook. |
 | `regenerate` | Request new code instead of replaying the matching saved step. |
