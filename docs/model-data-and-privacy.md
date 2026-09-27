@@ -28,8 +28,9 @@ Ordinary numeric fields do not receive category counts.
 
 Generation sends the plotting request, backend, and profile with system instructions.
 Refinement also sends the previous generated code and original request. A repair sends
-the prior model response (capped at 60,000 characters) and a sanitized diagnostic
-(capped at 500 characters). Notebook clarification answers are appended to the request.
+the prior model response (capped at 60,000 characters), a sanitized diagnostic
+(capped at 500 characters), and safe replacement guidance for recognized validator
+errors. Notebook clarification answers are appended to the request.
 Matching history replays, `render()`, and `to_python()` make no model request.
 
 The full input stays local for plotting. Augplot validates generated Python, then runs

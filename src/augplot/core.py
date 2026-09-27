@@ -12,7 +12,7 @@ from .execution import VALIDATOR_VERSION, execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
-from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, system_prompt_for
+from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, repair_guidance, system_prompt_for
 
 _PROGRESS_DELAY_SECONDS = 20
 _MAX_CLARIFICATIONS = 2
@@ -177,17 +177,22 @@ class _Visualization:
                     }
                 )
                 if attempt < self.max_repairs:
+                    repair = {
+                        "repair": (
+                            "Return corrected JSON per the contract. Recheck the entire "
+                            "function for other unsupported calls."
+                        ),
+                        "diagnostic": str(exc)[:500],
+                    }
+                    guidance = repair_guidance(exc.violations)
+                    if guidance is not None:
+                        repair["guidance"] = guidance
                     messages.extend(
                         [
                             {"role": "assistant", "content": response[:60_000]},
                             {
                                 "role": "user",
-                                "content": json.dumps(
-                                    {
-                                        "repair": "Return corrected JSON per the contract.",
-                                        "diagnostic": str(exc)[:500],
-                                    }
-                                ),
+                                "content": json.dumps(repair),
                             },
                         ]
                     )

@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "25"
+PROMPT_VERSION = "26"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -69,6 +69,10 @@ from `data` at runtime, including category labels and row counts; do not hard-co
 profile values. Work on a copy before changing data. Honor `title` and `figsize` when
 provided.
 
+In named Pandas `.agg`, use literal source-column strings and simple aggregation
+strings. For variable columns, select the Series and aggregate it directly. Evaluate
+polynomial curves with `np.polyval(coefficients, x)`, not a stored `np.poly1d` object.
+
 # Safety
 
 Generated Python runs locally after validation. Use direct calls and in-memory
@@ -91,6 +95,24 @@ the space needed for long category labels, legends, and notes; avoid large empty
 Place value labels clear of error bars and other marks. If optional annotations cannot
 fit legibly, omit them. Use layout spacing that keeps text clear of data and figure edges.
 """
+
+
+def repair_guidance(violations):
+    """Give a concrete safe replacement for common validator rejections."""
+    for violation in violations:
+        rule = violation["rule"]
+        message = violation["message"]
+        if rule == "dynamic_dispatch" and ".agg" in message:
+            return (
+                "Named .agg needs literal source-column strings and simple aggregation "
+                "strings. For variable columns, aggregate selected Series directly."
+            )
+        if rule == "call" and message.startswith("Indirect call"):
+            return (
+                "Replace the stored callable with a direct library call. For polynomial "
+                "curves, use np.polyval(coefficients, x)."
+            )
+    return None
 
 CROSS_VALIDATION_GUIDANCE = """# Conditional domain guidance: cross-validation results
 

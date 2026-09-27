@@ -37,6 +37,12 @@ frame.to_pickle("chart.pkl")
 fig.savefig("chart.png")
 ```
 
+For named Pandas `.agg`, use literal source-column strings and simple aggregation names
+in each tuple. If the column name is stored in a variable, aggregate the selected Series
+directly. For polynomial guide curves, evaluate coefficients with
+`np.polyval(coefficients, x)` instead of calling a stored `np.poly1d` object. Generation
+and repair prompts now include these patterns.
+
 The checks are intentionally modest. Data-sized loops and allocations are allowed,
 so a large input or expensive plotting operation can still use substantial CPU or
 memory. The AST rules reduce obvious side effects but cannot guarantee that every

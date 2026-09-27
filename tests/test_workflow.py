@@ -208,6 +208,30 @@ def test_repair_receives_validator_reason(fake_model):
     assert "generated line 4" in diagnostic
 
 
+@pytest.mark.parametrize(
+    ("bad_statement", "expected_guidance"),
+    [
+        (
+            'column = "value"\n    data.agg(result=(column, "median"))',
+            "literal source-column strings",
+        ),
+        (
+            "fitted = data\n    ax.plot(fitted(data))",
+            "np.polyval(coefficients, x)",
+        ),
+    ],
+)
+def test_repair_explains_supported_replacements(fake_model, bad_statement, expected_guidance):
+    bad = ARRAY_CODE.replace("ax.plot(data)", bad_statement)
+    calls = fake_model(response(bad), response(ARRAY_CODE))
+
+    assert plot([1, 2], show=False).figure is not None
+
+    repair = json.loads(calls[1]["messages"][-1]["content"])
+    assert expected_guidance in repair["guidance"]
+    assert "Recheck the entire function" in repair["repair"]
+
+
 def test_repair_receives_safe_scatter_shape_hint(fake_model):
     bad = ARRAY_CODE.replace("ax.plot(data)", "ax.scatter(0, data)")
     calls = fake_model(response(bad), response(ARRAY_CODE))
