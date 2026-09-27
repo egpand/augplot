@@ -166,6 +166,66 @@ def _stats(values):
     return result
 
 
+def _category_counts(values):
+    """Count observed scalar categories without sampling or coercing numeric columns."""
+    dtype = getattr(values, "dtype", None)
+    categorical = isinstance(dtype, pd.CategoricalDtype)
+    declared = categorical or (
+        dtype is not None
+        and (
+            pd.api.types.is_bool_dtype(dtype)
+            or (
+                pd.api.types.is_string_dtype(dtype)
+                and not pd.api.types.is_object_dtype(dtype)
+            )
+        )
+    )
+    counts = {}
+    missing = 0
+    for value in values:
+        absent = pd.isna(value)
+        if isinstance(absent, (bool, np.bool_)) and absent:
+            missing += 1
+            continue
+        if isinstance(value, np.generic):
+            value = value.item()
+        if not categorical and not isinstance(value, (str, bool)):
+            return None
+        try:
+            key = (type(value), value)
+            hash(key)
+        except TypeError:
+            return None
+        counts[key] = counts.get(key, 0) + 1
+    if not counts and not declared:
+        return None
+
+    def tie_break(key):
+        return (key[0].__name__, json.dumps(_value(key[1]), sort_keys=True))
+
+    tie_breaks = {key: tie_break(key) for key in counts}
+    ordered = sorted(counts, key=lambda key: (-counts[key], tie_breaks[key]))
+    if len(ordered) <= 20:
+        split = (len(ordered) + 1) // 2
+        common = ordered[:split]
+        rare = ordered[split:]
+    else:
+        common = ordered[:10]
+        rare = ordered[-10:]
+    rare = sorted(rare, key=lambda key: (counts[key], tie_breaks[key]))
+
+    def entries(keys):
+        return [{"value": _value(key[1]), "count": counts[key]} for key in keys]
+
+    return {
+        "distinct": len(ordered),
+        "missing": missing,
+        "common": entries(common),
+        "rare": entries(rare),
+        "omitted_distinct": len(ordered) - len(common) - len(rare),
+    }
+
+
 def profile_data(data, *, sample_rows=5, max_chars=20_000):
     """Return a profile capped by serialized character count, never a sliced JSON string."""
     if not isinstance(sample_rows, int) or not 0 <= sample_rows <= 100:
@@ -187,14 +247,18 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
                 index_type=type(value.index).__name__,
                 index_names=[_value(name) for name in value.index.names],
             )
-            result["columns"] = [
-                {
+            result["columns"] = []
+            for i in range(min(len(value.columns), 100)):
+                column = value.iloc[:, i]
+                description = {
                     "name": _value(value.columns[i]),
-                    "dtype": str(value.iloc[:, i].dtype),
-                    "stats": _stats(value.iloc[:, i]),
+                    "dtype": str(column.dtype),
+                    "stats": _stats(column),
                 }
-                for i in range(min(len(value.columns), 100))
-            ]
+                categories = _category_counts(column)
+                if categories is not None:
+                    description["category_counts"] = categories
+                result["columns"].append(description)
             result["sample_rows"] = [
                 {
                     "index": _value(value.index[i]),
@@ -215,6 +279,9 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
                     for i in _indices(len(value), sample_rows)
                 ],
             )
+            categories = _category_counts(value)
+            if categories is not None:
+                result["category_counts"] = categories
         elif isinstance(value, np.ndarray):
             result.update(
                 shape=list(value.shape),
@@ -243,35 +310,67 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
             )
             if value and all(isinstance(v, (int, float, np.number)) for v in value):
                 result["stats"] = _stats(value)
+            if value and all(isinstance(item, dict) for item in value):
+                names = {}
+                for record in value:
+                    for name in record:
+                        if name not in names and len(names) < 100:
+                            names[name] = None
+                        elif name not in names:
+                            result["truncated"] = True
+                fields = []
+                for name in names:
+                    categories = _category_counts(record.get(name) for record in value)
+                    if categories is not None:
+                        fields.append({"name": _value(name), "category_counts": categories})
+                if fields:
+                    result["fields"] = fields
         else:
             result["value"] = _value(value)
         return result
 
-    profile = {"profile_version": 1, "data": describe(data)}
+    profile = {"profile_version": 2, "data": describe(data)}
 
     def shrink(node):
-        candidates = []
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if isinstance(value, list) and value:
-                    candidates.append((len(json.dumps(value, default=str)), node, key))
-                candidates.extend(shrink(value))
-        elif isinstance(node, list):
-            for value in node:
-                candidates.extend(shrink(value))
-        return candidates
+        samples, categories, other = [], [], []
+
+        def collect(value):
+            if isinstance(value, dict):
+                is_category_summary = "omitted_distinct" in value and "distinct" in value
+                for key, item in value.items():
+                    if isinstance(item, list) and item:
+                        candidate = (len(json.dumps(item, ensure_ascii=True)), value, key)
+                        if key in {"sample", "sample_rows"}:
+                            samples.append(candidate)
+                        elif is_category_summary and key in {"common", "rare"}:
+                            categories.append(candidate)
+                        else:
+                            other.append(candidate)
+                    collect(item)
+            elif isinstance(value, list):
+                for item in value:
+                    collect(item)
+
+        collect(node)
+        for group in (samples, categories, other):
+            if group:
+                return max(group, key=lambda candidate: candidate[0])
+        return None
 
     while len(json.dumps(profile, ensure_ascii=True)) > max_chars:
         candidates = shrink(profile)
         profile["truncated"] = True
-        if not candidates:
+        if candidates is None:
             profile = {
-                "profile_version": 1,
+                "profile_version": 2,
                 "data": {"type": type(data).__name__},
                 "truncated": True,
             }
             break
-        _, parent, key = max(candidates, key=lambda candidate: candidate[0])
-        parent[key] = parent[key][: len(parent[key]) // 2]
+        _, parent, key = candidates
+        original_length = len(parent[key])
+        parent[key] = parent[key][: original_length // 2]
+        if key in {"common", "rare"} and "omitted_distinct" in parent:
+            parent["omitted_distinct"] += original_length - len(parent[key])
         parent["truncated"] = True
     return profile

@@ -131,8 +131,9 @@ replay rules.
 ## Data and generated code
 
 Augplot sends the configured model a bounded profile of your data, including samples,
-field names, and statistics. This is not anonymization; `sample_rows=0` omits samples but
-not all schema or summary information.
+field names, statistics, and category counts. This is not anonymization; `sample_rows=0`
+omits samples but not all values or summaries. See
+[model data and privacy](docs/model-data-and-privacy.md) for exactly what Augplot sends.
 
 Generated Python is validated, then runs locally against a copy of the data. Rejected
 code never runs or saves. This is defense in depth, not an OS sandbox. See

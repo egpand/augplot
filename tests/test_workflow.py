@@ -447,6 +447,27 @@ def test_payload_contains_profile_not_full_data(fake_model):
     assert calls[0]["response_format"]["json_schema"]["strict"] is True
 
 
+def test_generation_context_contains_rare_category_counts(fake_model):
+    frame = pd.DataFrame(
+        {
+            "spend": np.arange(10),
+            "revenue": np.arange(10) * 2,
+            "channel": ["common", "rare"] + ["common"] * 8,
+        }
+    )
+    calls = fake_model(response(DF_CODE))
+
+    plot(frame, show=False)
+
+    profile = json.loads(calls[0]["messages"][1]["content"])["data_profile"]
+    assert "rare" not in [row["values"][2] for row in profile["data"]["sample_rows"]]
+    summary = profile["data"]["columns"][2]["category_counts"]
+    assert {entry["value"]: entry["count"] for entry in summary["common"] + summary["rare"]} == {
+        "common": 9,
+        "rare": 1,
+    }
+
+
 def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypatch):
     calls = fake_model(response(ARRAY_CODE), response(ARRAY_CODE))
     monkeypatch.setenv("AUGPLOT_API_BASE", "https://environment.example")

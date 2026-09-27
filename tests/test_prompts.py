@@ -10,7 +10,7 @@ from augplot.prompts import (
 def test_prompt_is_short_and_keeps_the_workflow_contract():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "24"
+    assert PROMPT_VERSION == "25"
     assert len(SYSTEM_PROMPT) < 3_500
     assert "plot_data(data, *, title=None, figsize=None)" in prompt
     assert "Return only JSON" in prompt

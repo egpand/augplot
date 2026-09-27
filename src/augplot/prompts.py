@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "24"
+PROMPT_VERSION = "25"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -63,9 +63,11 @@ Matplotlib Figure with plotted data. Import only inside the function, using thes
 `import seaborn as sns` (only when the backend permits it). For `matplotlib`, use
 Matplotlib only; for `seaborn` or `auto`, use either as appropriate.
 
-The profile is a sample, not the full input. Derive plotted values from `data` at
-runtime; do not hard-code sampled values or row counts. Work on a copy before changing
-data. Honor `title` and `figsize` when provided.
+The profile contains samples and bounded category counts from the full input. It may
+omit categories even when their total distinct count is shown. Derive plotted values
+from `data` at runtime, including category labels and row counts; do not hard-code
+profile values. Work on a copy before changing data. Honor `title` and `figsize` when
+provided.
 
 # Safety
 
