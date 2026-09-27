@@ -30,6 +30,10 @@ class ScopeError(AugplotError, ValueError):
     """The request needs upstream modeling or prediction inputs, not plotting code."""
 
 
+class InputRequiredError(AugplotError, ValueError):
+    """A supported plot needs a choice or input the request did not provide."""
+
+
 class GenerationError(AugplotError):
     """The model did not produce a valid, executable plot."""
 

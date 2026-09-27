@@ -6,7 +6,7 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 
 from . import provider
-from .errors import ConfigurationError, GenerationError
+from .errors import ConfigurationError, GenerationError, InputRequiredError
 from .execution import VALIDATOR_VERSION, execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
@@ -14,6 +14,17 @@ from .profiling import copy_data, profile_data, validate_data
 from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, system_prompt_for
 
 _PROGRESS_DELAY_SECONDS = 20
+_MAX_CLARIFICATIONS = 2
+
+
+def _has_notebook_kernel():
+    """Whether a live IPython kernel can present an input request to the user."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return False
+    shell = get_ipython()
+    return shell is not None and getattr(shell, "kernel", None) is not None
 
 
 class _SlowRequestNotice:
@@ -233,6 +244,35 @@ class _Visualization:
             )
         return code, explanation, figure, record, path, root, False
 
+    def _resolve_with_clarification(
+        self, data, profile, prompt, *, data_hash, regenerate, refining=False
+    ):
+        """Ask notebook users for missing input, preserving the request's history identity."""
+        exchanges = []
+        request = prompt
+        for attempt in range(_MAX_CLARIFICATIONS + 1):
+            try:
+                resolved = self._resolve(
+                    data, profile, request,
+                    data_hash=data_hash, regenerate=regenerate, refining=refining,
+                )
+                return resolved, request
+            except InputRequiredError as exc:
+                if attempt == _MAX_CLARIFICATIONS or not _has_notebook_kernel():
+                    raise
+                try:
+                    answer = input(f"Augplot needs input: {exc}\n> ")
+                except (EOFError, RuntimeError):
+                    raise exc from None
+                if not answer.strip():
+                    raise
+                exchanges.append({"question": str(exc), "answer": answer.strip()})
+                request = (
+                    f"{prompt}\n\nAdditional user input for this request:\n"
+                    + json.dumps(exchanges, ensure_ascii=False)
+                )
+        raise AssertionError("Clarification loop exhausted without a result.")
+
     def _accept(self, resolved):
         (
             self.code, self.explanation, self.figure, self._record,
@@ -269,10 +309,10 @@ class _Visualization:
         profile = profile_data(data, sample_rows=self.sample_rows, max_chars=self.max_profile_chars)
         snapshot = copy_data(data)
         data_hash = fingerprint(snapshot) if self._history is not None else None
-        resolved = self._resolve(
-            snapshot, profile, prompt, data_hash=data_hash, regenerate=regenerate
+        resolved, effective_prompt = self._resolve_with_clarification(
+            snapshot, profile, prompt, data_hash=data_hash, regenerate=regenerate,
         )
-        self._data, self._prompt = snapshot, prompt
+        self._data, self._prompt = snapshot, effective_prompt
         self.profile, self._data_fingerprint = profile, data_hash
         self._accept(resolved)
         if show:
@@ -294,7 +334,7 @@ class _Visualization:
         """Reuse or generate a revision identified by its parent and instruction."""
         self._require_fit()
         self._validate_prompt(prompt)
-        resolved = self._resolve(
+        resolved, _ = self._resolve_with_clarification(
             self._data,
             self.profile,
             prompt,

@@ -62,6 +62,26 @@ plt.refine("Use one panel per region and label the largest value")
 the same object, so calls can be chained. Each refinement uses the current generated
 function as its parent.
 
+## Answer a plotting question
+
+If a chart needs a choice that the prompt and data do not settle, Augplot asks for it
+automatically when running in a Jupyter notebook kernel:
+
+```python
+viz = ap.plot(data, "Plot the selected metric")
+viz.refine("Use another metric")
+```
+
+Jupyter displays the standard `input()` field beneath the running cell. The answer is
+sent with the original request, and Augplot retries up to twice. A blank answer or an
+unresolved question raises `ap.InputRequiredError`. In a regular Python script or
+terminal, Augplot raises that error immediately without waiting for input. `fit()`
+uses the same behavior. Only a successful chart updates the current visualization or
+its history. The answer becomes part of that request's cache key, so a different answer
+creates a different saved chart. Rerunning the original prompt may ask again; giving
+the same answer to the same question replays the saved chart without another generation
+request.
+
 ## Reuse code with other data
 
 ```python
@@ -141,6 +161,7 @@ All public exceptions inherit from `ap.AugplotError`:
 | `ap.DataError` | Unsupported or unsafe-to-profile data. |
 | `ap.ProviderError` | Provider authentication, connectivity, or request failure. |
 | `ap.GenerationError` | Generated source or saved source failed validation/execution. |
+| `ap.InputRequiredError` | A supported chart needs an essential input or choice. |
 | `ap.ScopeError` | The request requires work outside the selected visualization backend. |
 
 See [visualization history](visualization-history.md) for cache keys, branching,

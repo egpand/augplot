@@ -7,6 +7,7 @@ from .errors import (
     ConfigurationError,
     DataError,
     GenerationError,
+    InputRequiredError,
     ProviderError,
     ScopeError,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "ConfigurationError",
     "DataError",
     "GenerationError",
+    "InputRequiredError",
     "ProviderError",
     "ScopeError",
 ]

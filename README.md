@@ -45,6 +45,9 @@ For nested cross-validation results, try the
 with an inline results dictionary, successive refinements, and an intentional
 `ScopeError` example.
 
+For a one-sentence plotting request on an open stellar catalog, try the
+[Hertzsprung–Russell notebook](examples/hertzsprung-russell-one-shot.ipynb).
+
 ## What can `data` be?
 
 `ap.plot(data)` accepts these nonempty, in-memory Python objects:

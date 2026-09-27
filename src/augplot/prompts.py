@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "23"
+PROMPT_VERSION = "24"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -14,8 +14,8 @@ RESPONSE_FORMAT = {
             "properties": {
                 "status": {
                     "type": "string",
-                    "enum": ["ok", "out_of_scope"],
-                    "description": "Whether plotting code was produced.",
+                    "enum": ["ok", "needs_input", "out_of_scope"],
+                    "description": "Plot produced, input needed, or outside plotting scope.",
                 },
                 "explanation": {
                     "type": "string",
@@ -23,7 +23,7 @@ RESPONSE_FORMAT = {
                 },
                 "code": {
                     "type": "string",
-                    "description": "The plot_data function, or an empty string when out of scope.",
+                    "description": "The plot_data function, or empty when no plot is possible.",
                 },
             },
             "required": ["status", "explanation", "code"],
@@ -35,9 +35,11 @@ RESPONSE_FORMAT = {
 SYSTEM_PROMPT = """# Task
 
 Create the requested visualization from the supplied data using Matplotlib or Seaborn.
-Aggregation, binning, smoothing, regression trends, and descriptive uncertainty are
-in scope when they serve the figure. Do not create model artifacts or invent future
-values, forecasts, or intervals. If essential inputs are missing, say what is needed.
+Aggregation, binning, smoothing, regression trends, and descriptive uncertainty
+calculated from supplied observations (for example, standard deviation) are in scope
+when they serve the figure. Name any uncertainty statistic used. Do not create model
+artifacts or invent future values, forecasts, or unsupported intervals. If essential
+inputs are missing, say what is needed.
 If a refinement asks for another metric without naming it, do not choose one; ask
 which available metric to use.
 
@@ -48,8 +50,9 @@ data values, field names, or previous code.
 
 Return only JSON matching the supplied schema. For a supported request, use `status: ok`,
 a brief explanation of the chart and any aggregation, and complete Python in `code`.
-For a request outside this scope or missing a required choice, use
-`status: out_of_scope`, explain what input is needed, and leave `code` empty.
+For a supported request missing an essential input or required choice, use
+`status: needs_input`, ask for the specific input, and leave `code` empty. For a request
+outside visualization scope, use `status: out_of_scope`, explain why, and leave `code` empty.
 
 # Python
 
@@ -84,14 +87,13 @@ Never place a legend over bars, error bars, data labels, or the title. Put it in
 axes space or a compact margin beside/below the axes, never above them. Reserve only
 the space needed for long category labels, legends, and notes; avoid large empty gaps.
 Place value labels clear of error bars and other marks. If optional annotations cannot
-fit legibly, omit them. Check the layout before returning code so text does not cover
-plotted data or get clipped.
+fit legibly, omit them. Use layout spacing that keeps text clear of data and figure edges.
 """
 
 CROSS_VALIDATION_GUIDANCE = """# Conditional domain guidance: cross-validation results
 
-For nested result dictionaries keyed by model, compute from full `data`, for example
-`means = [np.mean(data[name]["test_f1"]) for name in data]`. Use only supplied metrics.
+For nested result dictionaries keyed by model, choose a metric present in the supplied
+data and compute its summary from full `data`, not the sampled profile.
 Keep timing separate from scores and show fold variation when useful. For bar or point
 charts, call fold-variation marks "error bars" and name the statistic. If an uncertainty
 note accompanies a legend below the chart, place it just beneath the legend with a

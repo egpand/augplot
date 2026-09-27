@@ -6,7 +6,7 @@ from conftest import ARRAY_CODE, response
 from notebook_charts import FLIGHTS_HEATMAP, FLIGHTS_LINES, PENGUIN_FACETS, PENGUIN_SCATTER
 from titanic_fixture import titanic_timeline_events
 
-from augplot import GenerationError, ScopeError
+from augplot import GenerationError, InputRequiredError, ScopeError
 from augplot.execution import execute, parse_response, validate_code
 
 TIMELINE_CODE = """def plot_data(data, *, title=None, figsize=None):
@@ -732,6 +732,7 @@ def test_accepts_single_json_fence():
         {"status": "ok", "code": "", "explanation": "Missing code"},
         {"status": "ok", "code": ARRAY_CODE, "explanation": "Fine", "extra": True},
         {"status": "out_of_scope", "code": ARRAY_CODE, "explanation": "Must be empty"},
+        {"status": "needs_input", "code": ARRAY_CODE, "explanation": "Must be empty"},
     ],
 )
 def test_rejects_responses_outside_unified_schema(payload):
@@ -746,6 +747,16 @@ def test_parses_unified_out_of_scope_response():
         "explanation": "Provide upstream predictions.",
     }
     with pytest.raises(ScopeError, match="upstream predictions"):
+        parse_response(json.dumps(payload))
+
+
+def test_parses_unified_needs_input_response():
+    payload = {
+        "status": "needs_input",
+        "code": "",
+        "explanation": "Which available metric should I use?",
+    }
+    with pytest.raises(InputRequiredError, match="Which available metric"):
         parse_response(json.dumps(payload))
 
 

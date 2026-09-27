@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -13,7 +14,14 @@ import pandas as pd
 import pytest
 from conftest import ARRAY_CODE, CV_CODE, DF_CODE, response
 
-from augplot import ConfigurationError, GenerationError, ProviderError, ScopeError, plot
+from augplot import (
+    ConfigurationError,
+    GenerationError,
+    InputRequiredError,
+    ProviderError,
+    ScopeError,
+    plot,
+)
 from augplot.core import _Visualization
 
 
@@ -264,6 +272,142 @@ def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monk
     )
     with pytest.raises(ScopeError, match="upstream model"):
         plot([1, 2], prompt="Train a model and forecast next month", show=False)
+    assert len(calls) == 1
+    assert not Path(".augplot").exists()
+
+
+def test_missing_input_stops_without_execution_or_repair(fake_model, monkeypatch):
+    from augplot import core
+
+    def unexpected_execution(*args, **kwargs):
+        raise AssertionError("A clarification request must not execute code")
+
+    monkeypatch.setattr(core, "execute", unexpected_execution)
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: False)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: pytest.fail("Scripts must not wait for input")
+    )
+    calls = fake_model(
+        json.dumps(
+            {
+                "status": "needs_input",
+                "code": "",
+                "explanation": "Which available metric should I use?",
+            }
+        )
+    )
+    with pytest.raises(InputRequiredError, match="Which available metric"):
+        plot({"score": [1, 2]}, prompt="Show another metric", show=False)
+    assert len(calls) == 1
+    assert not Path(".augplot").exists()
+
+
+def test_clarification_detects_only_a_live_ipython_kernel(monkeypatch):
+    import IPython
+
+    from augplot.core import _has_notebook_kernel
+
+    monkeypatch.setattr(IPython, "get_ipython", lambda: None)
+    assert not _has_notebook_kernel()
+    monkeypatch.setattr(IPython, "get_ipython", lambda: SimpleNamespace(kernel=None))
+    assert not _has_notebook_kernel()
+    monkeypatch.setattr(IPython, "get_ipython", lambda: SimpleNamespace(kernel=object()))
+    assert _has_notebook_kernel()
+
+
+def test_plot_clarification_retries_and_replays_answered_request(fake_model, monkeypatch):
+    from augplot import core
+
+    question = "Which available metric should I use?"
+    needs_input = json.dumps(
+        {"status": "needs_input", "code": "", "explanation": question}
+    )
+    calls = fake_model(needs_input, response(ARRAY_CODE), needs_input)
+    prompts = []
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: prompts.append(prompt) or "Use the measured temperature"
+    )
+
+    viz = plot([1, 2], prompt="Plot the selected metric", show=False)
+
+    assert prompts == [f"Augplot needs input: {question}\n> "]
+    assert viz.figure is not None
+    retry_context = json.loads(calls[1]["messages"][1]["content"])
+    assert retry_context["operation"] == "generate"
+    assert retry_context["request"].startswith("Plot the selected metric")
+    assert '"answer": "Use the measured temperature"' in retry_context["request"]
+    assert viz._prompt == retry_context["request"]
+
+    replay = plot([1, 2], prompt="Plot the selected metric", show=False)
+    assert replay.cache_hit
+    assert len(calls) == 3
+    assert prompts == [f"Augplot needs input: {question}\n> "] * 2
+    assert replay.history_path == viz.history_path
+
+
+def test_refine_clarification_uses_input_in_notebook_and_keeps_parent(fake_model, monkeypatch):
+    from augplot import core
+
+    question = "Which metric should I use?"
+    calls = fake_model(
+        response(ARRAY_CODE),
+        json.dumps({"status": "needs_input", "code": "", "explanation": question}),
+        response(ARRAY_CODE),
+    )
+    prompts = []
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: prompts.append(prompt) or "Use radius"
+    )
+    viz = plot([1, 2], show=False)
+    parent_revision = viz._record["revision"]
+
+    assert viz.refine("Show another metric", show=False) is viz
+
+    assert prompts == [f"Augplot needs input: {question}\n> "]
+    context = json.loads(calls[2]["messages"][1]["content"])
+    assert context["operation"] == "refine"
+    assert context["previous_code"] == ARRAY_CODE
+    assert context["original_request"] == "auto"
+    assert '"answer": "Use radius"' in context["request"]
+    assert viz._record["parent"] == parent_revision
+
+
+def test_clarification_is_bounded_and_preserves_fitted_state(fake_model, monkeypatch):
+    from augplot import core
+
+    needs_input = json.dumps(
+        {"status": "needs_input", "code": "", "explanation": "Specify a metric."}
+    )
+    calls = fake_model(response(ARRAY_CODE), needs_input, needs_input, needs_input)
+    viz = plot([1, 2], show=False)
+    before = (viz.code, viz.figure, viz.history_path, viz._record)
+    saved_files = set(Path(".augplot").rglob("*"))
+    answers = iter(["first", "second"])
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    with pytest.raises(InputRequiredError, match="Specify a metric"):
+        viz.refine("Use another metric", show=False)
+
+    assert len(calls) == 4
+    assert (viz.code, viz.figure, viz.history_path, viz._record) == before
+    assert set(Path(".augplot").rglob("*")) == saved_files
+
+
+def test_empty_clarification_answer_leaves_input_required(fake_model, monkeypatch):
+    from augplot import core
+
+    calls = fake_model(
+        json.dumps(
+            {"status": "needs_input", "code": "", "explanation": "Choose a metric."}
+        )
+    )
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "  ")
+    with pytest.raises(InputRequiredError, match="Choose a metric"):
+        plot([1, 2], show=False)
     assert len(calls) == 1
     assert not Path(".augplot").exists()
 

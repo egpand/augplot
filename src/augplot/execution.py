@@ -5,7 +5,7 @@ import builtins
 import json
 from contextlib import ExitStack
 
-from .errors import GenerationError, ScopeError
+from .errors import GenerationError, InputRequiredError, ScopeError
 from .profiling import copy_data
 
 VALIDATOR_VERSION = 9
@@ -216,16 +216,17 @@ def parse_response(response: str) -> tuple[str, str]:
         raise GenerationError("Response does not match the Augplot response schema.")
     status, code, explanation = result["status"], result["code"], result["explanation"]
     if (
-        status not in {"ok", "out_of_scope"}
+        status not in {"ok", "needs_input", "out_of_scope"}
         or not isinstance(code, str)
         or not isinstance(explanation, str)
         or not explanation.strip()
     ):
         raise GenerationError("Response has invalid code or explanation fields.")
-    if status == "out_of_scope":
+    if status in {"needs_input", "out_of_scope"}:
         if code.strip():
-            raise GenerationError("Out-of-scope responses must have an empty code field.")
-        raise ScopeError(explanation.strip()[:1000])
+            raise GenerationError("Responses without a plot must have an empty code field.")
+        error_type = InputRequiredError if status == "needs_input" else ScopeError
+        raise error_type(explanation.strip()[:1000])
     if not code.strip():
         raise GenerationError("Successful responses must contain code.")
     if len(code) > MAX_SOURCE_CHARS:
