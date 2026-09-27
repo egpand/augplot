@@ -168,6 +168,11 @@ All public exceptions inherit from `ap.AugplotError`:
 | `ap.InputRequiredError` | A supported chart needs an essential input or choice. |
 | `ap.ScopeError` | The request requires work outside the selected visualization backend. |
 
+When all generation attempts fail, `GenerationError.diagnostics_path` points to a private
+directory under the matching visualization history root with rejected source and an
+`errors.json` summary. The exception message includes the path. If `cache_dir=None` or
+the directory cannot be written, the error still raises and `diagnostics_path` is `None`.
+
 See [visualization history](visualization-history.md) for cache keys, branching,
 regeneration, and replay behavior. See [generated-code guardrails](generated-code-guardrails.md)
 for validation, repair, and rejected-code behavior.

@@ -1,5 +1,6 @@
 """Public exceptions. Provider/runtime diagnostics never include raw data or credentials."""
 
+from pathlib import Path
 from typing import TypedDict
 
 
@@ -43,7 +44,9 @@ class GenerationError(AugplotError):
         *,
         code: str | None = None,
         violations: list[ValidationViolation] | None = None,
+        diagnostics_path: Path | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.violations = list(violations or [])
+        self.diagnostics_path = diagnostics_path

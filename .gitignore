@@ -10,6 +10,7 @@ build/
 .env
 .env.*
 !.env.example
+.augplot/
 vis_utils.py
 examples/vis_utils.py
 examples/.augplot

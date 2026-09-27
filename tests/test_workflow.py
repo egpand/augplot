@@ -236,8 +236,56 @@ def test_failure_preserves_state_and_exposes_candidate(cv_data, fake_model):
     with pytest.raises(GenerationError) as caught:
         viz.refine("Change it", show=False)
     assert caught.value.code == bad
+    assert caught.value.diagnostics_path.parent.parent == viz.history_path.parent
     assert (viz.code, viz.figure, viz.explanation, viz.profile) == previous
     assert len(calls) == 3
+
+
+def test_failed_attempts_are_saved_beside_history(tmp_path, fake_model):
+    first = ARRAY_CODE.replace("ax.plot(data)", "data.agg(1)")
+    second = ARRAY_CODE.replace("ax.plot(data)", "data.agg(2)")
+    fake_model(response(first), response(second))
+
+    with pytest.raises(GenerationError) as caught:
+        plot([1, 2], show=False)
+
+    directory = caught.value.diagnostics_path
+    assert directory is not None
+    assert directory.parent.name == "failures"
+    assert directory.parents[2] == tmp_path / ".augplot" / "plots"
+    assert str(directory) in str(caught.value)
+    assert caught.value.code == second
+    assert (directory / "attempt-1.py").read_text() == first
+    assert (directory / "attempt-2.py").read_text() == second
+    attempts = json.loads((directory / "errors.json").read_text())["attempts"]
+    assert [item["attempt"] for item in attempts] == [1, 2]
+    assert all(".agg at generated line" in item["error"] for item in attempts)
+    assert all(item["violations"][0]["rule"] == "dynamic_dispatch" for item in attempts)
+    assert all(item["response"] is None for item in attempts)
+
+
+def test_malformed_final_response_is_saved_for_debugging(fake_model):
+    fake_model("invalid response")
+
+    with pytest.raises(GenerationError) as caught:
+        plot([1, 2], max_repairs=0, show=False)
+
+    directory = caught.value.diagnostics_path
+    assert directory is not None
+    assert (directory / "response-1.txt").read_text() == "invalid response"
+    attempts = json.loads((directory / "errors.json").read_text())["attempts"]
+    assert attempts[0]["source"] is None
+    assert attempts[0]["response"] == "response-1.txt"
+
+
+def test_cache_dir_none_skips_failure_files(fake_model):
+    fake_model("invalid response")
+
+    with pytest.raises(GenerationError) as caught:
+        plot([1, 2], max_repairs=0, cache_dir=None, show=False)
+
+    assert caught.value.diagnostics_path is None
+    assert not Path(".augplot").exists()
 
 
 def test_repairs_disabled_and_provider_errors_not_repaired(fake_model):

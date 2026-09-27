@@ -35,6 +35,11 @@ Matching history replays, `render()`, and `to_python()` make no model request.
 The full input stays local for plotting. Augplot validates generated Python, then runs
 it locally on a copy. History saves generated source, explanation, and a full-data
 fingerprint, not the input or profile; generated source may contain literal values.
+After all generation attempts fail, a private directory under the matching history root
+holds rejected source and validation errors. If a response cannot be parsed, its first
+60,000 characters are saved instead. These local diagnostic files may contain literal
+values and should be reviewed before sharing; they do not contain the full input or
+profile. `cache_dir=None` disables diagnostic persistence.
 Augplot disables LiteLLM caching. Provider retention depends on the configured provider.
 
 ## Disclosure limits

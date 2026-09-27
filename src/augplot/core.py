@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 
 from . import provider
+from .diagnostics import save_generation_failure
 from .errors import ConfigurationError, GenerationError, InputRequiredError
 from .execution import VALIDATOR_VERSION, execute, parse_response
 from .exporting import write_python_function
@@ -119,7 +120,10 @@ class _Visualization:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ConfigurationError("prompt must be 'auto' or a nonempty instruction string.")
 
-    def _generate(self, data, profile, prompt, *, previous_code=None, original_prompt=None):
+    def _generate(
+        self, data, profile, prompt, *, previous_code=None, original_prompt=None,
+        diagnostics_directory=None,
+    ):
         model, api_base = self._configuration()
         context = {
             "prompt_version": PROMPT_VERSION,
@@ -139,6 +143,7 @@ class _Visualization:
         ]
         last_error = None
         code = None
+        failures = []
         total_attempts = self.max_repairs + 1
         for attempt in range(total_attempts):
             number = attempt + 1
@@ -153,12 +158,24 @@ class _Visualization:
                     response_format=RESPONSE_FORMAT,
                 )
             print("Augplot: checking generated plotting code...", flush=True)
+            candidate_code = None
             try:
-                code, explanation = parse_response(response)
-                figure = execute(code, data, backend=self.backend)
-                return code, explanation, figure
+                candidate_code, explanation = parse_response(response)
+                figure = execute(candidate_code, data, backend=self.backend)
+                return candidate_code, explanation, figure
             except GenerationError as exc:
                 last_error = exc
+                if candidate_code is not None:
+                    code = candidate_code
+                failures.append(
+                    {
+                        "attempt": number,
+                        "code": candidate_code,
+                        "response": response,
+                        "error": str(exc),
+                        "violations": exc.violations,
+                    }
+                )
                 if attempt < self.max_repairs:
                     messages.extend(
                         [
@@ -174,11 +191,14 @@ class _Visualization:
                             },
                         ]
                     )
+        diagnostics_path = save_generation_failure(failures, diagnostics_directory)
+        location = f" Diagnostics saved to {diagnostics_path}." if diagnostics_path else ""
         raise GenerationError(
             f"Could not generate a working visualization after {self.max_repairs + 1} "
-            f"attempt(s). {last_error}",
+            f"attempt(s). {last_error}{location}",
             code=code,
             violations=last_error.violations if last_error is not None else None,
+            diagnostics_path=diagnostics_path,
         ) from None
 
     def _resolve(self, data, profile, prompt, *, data_hash, regenerate, refining=False):
@@ -230,6 +250,9 @@ class _Visualization:
             prompt,
             previous_code=self.code if refining else None,
             original_prompt=self._prompt if refining else None,
+            diagnostics_directory=(
+                self._history.directory / root / "failures" if self._history is not None else None
+            ),
         )
         record, path = None, None
         if self._history is not None:
