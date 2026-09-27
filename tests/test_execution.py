@@ -809,6 +809,36 @@ def test_common_pandas_aggregation_and_index_assignment_are_allowed():
     assert [patch.get_height() for patch in figure.axes[0].patches] == [4, 4]
 
 
+def test_named_aggregation_for_class_guide_curves_is_allowed():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    subset = data.copy()
+    subset["bin"] = pd.qcut(subset["x"], q=2, duplicates="drop")
+    guides = subset.groupby("bin", observed=True).agg(
+        x=("x", "mean"), y=("y", "median"), count=("y", "size")
+    )
+    fig, ax = plt.subplots()
+    ax.plot(guides["x"], guides["y"])
+    return fig
+"""
+    data = pd.DataFrame({"x": [0, 1, 2, 3, 4, 5], "y": [1, 2, 3, 4, 5, 6]})
+    figure = execute(code, data, backend="matplotlib")
+    assert len(figure.axes[0].lines) == 1
+    assert len(figure.axes[0].lines[0].get_xdata()) == 2
+
+
+def test_named_aggregation_cannot_dispatch_to_external_methods():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    summary = data.groupby("group").agg(value=("value", "to_pickle"))
+    fig, ax = plt.subplots()
+    ax.plot(summary)
+    return fig
+"""
+    assert_rejected_by(code, "dynamic_dispatch")
+
+
 def test_series_map_with_local_label_mapping_is_allowed():
     code = """def plot_data(data, *, title=None, figsize=None):
     import matplotlib.pyplot as plt

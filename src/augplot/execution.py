@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from .errors import GenerationError, InputRequiredError, ScopeError
 from .profiling import copy_data
 
-VALIDATOR_VERSION = 9
+VALIDATOR_VERSION = 10
 MAX_SOURCE_CHARS = 50_000
 MAX_AST_NODES = 4_000
 MAX_LITERAL_ITEMS = 2_000
@@ -397,9 +397,15 @@ class _Validator(ast.NodeVisitor):
                     if node.args
                     else next((item.value for item in node.keywords if item.arg == "func"), None)
                 )
-                if not self._safe_dispatch(target, mapping=name == "map"):
+                named_aggregation = (
+                    name in {"agg", "aggregate"}
+                    and not node.args
+                    and self._safe_named_aggregations(node.keywords)
+                )
+                if not self._safe_dispatch(target, mapping=name == "map") and not named_aggregation:
                     self.fail(
-                        "dynamic_dispatch", "Dynamic dispatch requires a simple safe function."
+                        "dynamic_dispatch",
+                        f".{name} at generated line {node.lineno} requires a simple safe function.",
                     )
             if (
                 name in _RESOURCE_ALLOCATORS
@@ -458,6 +464,23 @@ class _Validator(ast.NodeVisitor):
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and (node.value.id == "np" and node.attr in _MODULE_VALUES)
+        )
+
+    def _safe_named_aggregations(self, keywords):
+        """Allow Pandas named aggregations with literal columns and safe functions."""
+        return bool(keywords) and all(
+            keyword.arg is not None
+            and isinstance(keyword.value, ast.Tuple)
+            and len(keyword.value.elts) == 2
+            and isinstance(keyword.value.elts[0], ast.Constant)
+            and isinstance(keyword.value.elts[0].value, str)
+            and not (
+                isinstance(keyword.value.elts[1], ast.Constant)
+                and isinstance(keyword.value.elts[1].value, str)
+                and keyword.value.elts[1].value.startswith("_")
+            )
+            and self._safe_dispatch(keyword.value.elts[1])
+            for keyword in keywords
         )
 
     def _static_integer(self, node):
