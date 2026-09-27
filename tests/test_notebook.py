@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import nbformat
+import pandas as pd
 from jupyter_client import KernelManager
 from jupyter_client.kernelspec import KernelSpecManager
 from nbclient import NotebookClient
@@ -15,6 +16,34 @@ from notebook_charts import (
     PENGUIN_FACETS,
     PENGUIN_SCATTER,
 )
+
+
+def test_hr_notebook_preserves_case_in_white_dwarf_labels():
+    notebook = nbformat.read(
+        Path(__file__).parents[1] / "examples" / "hertzsprung-russell-one-shot.ipynb",
+        as_version=4,
+    )
+    data_cell = next(cell for cell in notebook.cells if cell.id == "hr-data")
+    catalog = pd.DataFrame(
+        {
+            "dist": [10.0] * 3,
+            "mag": [5.0] * 3,
+            "absmag": [12.0, 12.0, 4.83],
+            "ci": [1.5, 0.2, 0.6],
+            "spect": ["dM4", "DA6", "G2V"],
+        }
+    )
+    namespace = {"catalog": catalog, "pd": pd}
+
+    exec(data_cell.source, namespace)
+
+    stars = namespace["stars"]
+    assert stars["stellar_class"].tolist() == [
+        "Unclassified",
+        "White dwarfs",
+        "Main sequence",
+    ]
+    assert stars.loc[2, "relative_V_band_luminosity_solar"] == 1.0
 
 
 def test_example_in_real_kernel_with_mocked_inference(tmp_path):
