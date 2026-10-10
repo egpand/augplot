@@ -182,12 +182,10 @@ class _Visualization:
         failures = []
         total_attempts = self.max_repairs + 1
         if self._transport == "chatgpt":
-            from .auth import MANAGE_USAGE_URL, _profile, _read_state
+            from .auth import MANAGE_USAGE_URL
 
-            _, account = _profile(_read_state(), self._chatgpt_profile_id)
-            label = " ".join(account["label"].split())
             print(
-                f"Augplot: {label}; model={model}; Using ChatGPT plan. "
+                f"Augplot: account=***; model={model}; Using ChatGPT plan. "
                 f"Manage usage: {MANAGE_USAGE_URL}"
             )
         for attempt in range(total_attempts):

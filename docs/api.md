@@ -32,6 +32,9 @@ credentials. Use `select_account(profile_id)` to change the active account,
 `sign_in(new_account=True)` to connect another, and `sign_out(profile_id=None)` to revoke
 and remove the selected connection's local credentials.
 
+Plotting progress masks the account as `account=***` so shared notebook output does not
+show your email or name. `accounts()` still provides full labels for account selection.
+
 `models()` lists the selected account's available models, which can differ from the
 ChatGPT picker and API catalog. Augplot chooses the first visible catalog model when no
 default is saved. `set_model(model_id)` validates and remembers a catalog ID per account.

@@ -607,6 +607,32 @@ def test_sdk_error_does_not_expose_credentials_or_payload(saved_account, monkeyp
     assert "PRIVATE_PROFILE" not in str(caught.value)
 
 
+@pytest.mark.parametrize("label", ["test@example.invalid", "Private Account Name"])
+def test_chatgpt_progress_masks_identity_for_generation_and_refinement(
+    saved_account, stream_client, capsys, label
+):
+    from conftest import ARRAY_CODE
+    from conftest import response as plot_response
+
+    from augplot import plot
+
+    state = auth._read_state()
+    state["profiles"]["first"]["label"] = label
+    auth._write_state(state)
+    _, events = stream_client
+    events.extend(completed_events(plot_response(ARRAY_CODE)))
+
+    viz = plot([1, 2], auth="chatgpt", cache_dir=None, show=False)
+    viz.refine("Add labels", show=False)
+
+    output = capsys.readouterr().out
+    assert output.count("account=***; model=model-a; Using ChatGPT plan.") == 2
+    assert label not in output
+    assert "SECRET_ACCESS" not in output
+    assert auth.MANAGE_USAGE_URL in output
+    assert auth.accounts()[0]["label"] == label
+
+
 def test_model_and_account_are_pinned_for_refinement_and_replay(
     saved_account,
     stream_client,
