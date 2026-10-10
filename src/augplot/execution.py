@@ -658,10 +658,10 @@ def execute(code, data, *, backend, title=None, figsize=None):
     permitted = allowed_imports(backend)
 
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
-        numpy_internal = name in {"numpy._core._methods", "numpy.core._methods"}
-        # NumPy's ndarray reductions import this module lazily through the calling
-        # function's builtins. The AST still forbids generated source from importing it.
-        if level or name not in permitted and not numpy_internal:
+        library_internal = name in {"numpy._core._methods", "numpy.core._methods", "time"}
+        # NumPy reductions and datetime/Timestamp.strftime import helpers through
+        # the calling function's builtins. The AST still forbids source imports of them.
+        if level or name not in permitted and not library_internal:
             raise ImportError("Import is not permitted.")
         return builtins.__import__(name, globals, locals, fromlist, level)
 

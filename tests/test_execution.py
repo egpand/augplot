@@ -171,6 +171,84 @@ def test_backend_import_enforced():
         validate_code(ARRAY_CODE.replace("ax.plot(data)", "import seaborn as sns"), "matplotlib")
 
 
+@pytest.mark.parametrize("conversion", ["", ".to_pydatetime()"])
+def test_datetime_labels_support_library_internal_time_import(conversion):
+    code = f'''def plot_data(data, *, title=None, figsize=None):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    label = pd.Timestamp(2000, 2, 3){conversion}.strftime("%Y-%m-%d")
+    fig, ax = plt.subplots()
+    ax.plot(data)
+    ax.set_title(label)
+    return fig
+'''
+
+    figure = execute(code, [1, 2, 3], backend="matplotlib")
+
+    assert figure.axes[0].get_title() == "2000-02-03"
+
+
+def test_calendar_heatmap_formats_month_labels_and_annotates_full_data():
+    code = '''def plot_data(data, *, title=None, figsize=None):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    frame = data.copy()
+    frame["month_number"] = pd.to_datetime(frame["month"], format="%b").dt.month
+    month_labels = frame.set_index("month_number")["month"].to_dict()
+    matrix = frame.pivot(index="year", columns="month_number", values="passengers")
+    matrix = matrix.reindex(columns=range(1, 13))
+    labels = [month_labels.get(m, pd.Timestamp(2000, m, 1).strftime("%b"))
+              for m in range(1, 13)]
+    fig, ax = plt.subplots(figsize=figsize or (12, 5))
+    sns.heatmap(matrix, annot=True, fmt=".0f", xticklabels=labels, ax=ax)
+    peak = frame.loc[frame["passengers"].idxmax()]
+    column = int(peak["month_number"]) - 1
+    row = list(matrix.index).index(peak["year"])
+    ax.plot([column, column + 1, column + 1, column, column],
+            [row, row, row + 1, row + 1, row], color="red", linewidth=2)
+    ax.set_title(title or "Calendar heatmap")
+    return fig
+'''
+    months = pd.date_range("2000-01-01", periods=12, freq="MS").strftime("%b").tolist()
+    data = pd.DataFrame(
+        {
+            "year": [1949] * 12 + [1950] * 12,
+            "month": months * 2,
+            "passengers": list(range(100, 124)),
+        }
+    ).sample(frac=1, random_state=1)
+    original = data.copy(deep=True)
+
+    figure = execute(code, data, backend="seaborn", title="Flight calendar")
+
+    axis = figure.axes[0]
+    assert len(figure.axes) == 2
+    assert axis.get_title() == "Flight calendar"
+    assert [label.get_text() for label in axis.get_xticklabels()] == months
+    assert [label.get_text() for label in axis.get_yticklabels()] == ["1949", "1950"]
+    assert [text.get_text() for text in axis.texts] == [str(value) for value in range(100, 124)]
+    assert list(axis.lines[0].get_xdata()) == [11, 12, 12, 11, 11]
+    assert list(axis.lines[0].get_ydata()) == [1, 1, 2, 2, 1]
+    pd.testing.assert_frame_equal(data, original)
+
+
+@pytest.mark.parametrize(
+    ("statement", "rule"),
+    [
+        ("import time as time", "import"),
+        ('__import__("time")', "call"),
+        ("np.ma.masked_invalid(data)", "module_access"),
+    ],
+)
+def test_library_internal_imports_do_not_enable_generated_imports_or_module_traversal(
+    statement, rule
+):
+    code = ARRAY_CODE.replace("ax.plot(data)", "import numpy as np\n    " + statement)
+
+    assert_rejected_by(code, rule, backend="matplotlib")
+
+
 @pytest.mark.parametrize(
     "statement",
     [
