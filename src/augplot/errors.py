@@ -27,6 +27,10 @@ class ProviderError(AugplotError):
     """The configured model could not be called."""
 
 
+class AuthenticationError(ProviderError):
+    """A ChatGPT connection could not be established or renewed."""
+
+
 class ScopeError(AugplotError, ValueError):
     """The request needs upstream modeling or prediction inputs, not plotting code."""
 

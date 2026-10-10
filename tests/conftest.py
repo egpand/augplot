@@ -1,4 +1,5 @@
 import json
+import os
 
 import matplotlib
 import pytest
@@ -7,9 +8,16 @@ matplotlib.use("Agg")
 
 
 @pytest.fixture(autouse=True)
-def isolated_working_directory(tmp_path, monkeypatch):
+def isolated_working_directory(tmp_path, monkeypatch, request):
     """Keep persistent plot history and exports isolated from other tests/projects."""
     monkeypatch.chdir(tmp_path)
+    from augplot import auth
+
+    live = request.node.get_closest_marker("live") and (
+        os.getenv("AUGPLOT_LIVE_TEST") == "1" or os.getenv("AUGPLOT_LIVE_CHATGPT_TEST") == "1"
+    )
+    if not live:
+        monkeypatch.setattr(auth, "_directory", lambda: tmp_path / "chatgpt-config")
 
 CV_CODE = """def plot_data(data, *, title=None, figsize=None):
     import numpy as np

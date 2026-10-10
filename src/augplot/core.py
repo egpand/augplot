@@ -57,7 +57,7 @@ class _SlowRequestNotice:
 class _Visualization:
     """Generate, refine, and reuse a plot with inspectable Python source.
 
-    Provider credentials are read by LiteLLM when a request is made. Generated Python
+    Provider credentials are read lazily when a request is made. Generated Python
     executes locally after conservative checks; it is not sandboxed. Data samples are
     sent to the configured model. See the README for the supported data and trust model.
     """
@@ -66,6 +66,7 @@ class _Visualization:
         self,
         *,
         model: str | None = None,
+        auth: str = "auto",
         backend: str = "auto",
         display_format: str = "retina",
         api_base: str | None = None,
@@ -75,6 +76,8 @@ class _Visualization:
         max_repairs: int = 1,
         cache_dir: str | Path | None = ".augplot/plots",
     ):
+        if auth not in {"auto", "chatgpt", "api_key"}:
+            raise ConfigurationError("auth must be auto, chatgpt, or api_key.")
         if backend not in {"auto", "matplotlib", "seaborn"}:
             raise ConfigurationError("backend must be auto, matplotlib, or seaborn.")
         if display_format not in {"retina", "png", "svg"}:
@@ -88,6 +91,10 @@ class _Visualization:
         if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
             raise ConfigurationError("timeout must be a finite positive number of seconds.")
         self.model = model
+        self.auth = auth
+        self._transport = None
+        self._chatgpt_profile_id = None
+        self._chatgpt_configuration = None
         self.backend = backend
         self.display_format = display_format
         self.api_base = api_base
@@ -109,10 +116,39 @@ class _Visualization:
         self._prompt = "auto"
 
     def _configuration(self):
+        if self._chatgpt_configuration is not None:
+            return self._chatgpt_configuration
         model = self.model if self.model is not None else os.getenv("AUGPLOT_MODEL")
+        api_base = self.api_base if self.api_base is not None else os.getenv("AUGPLOT_API_BASE")
+        use_chatgpt = self.auth == "chatgpt" or (
+            self.auth == "auto" and model is None and api_base is None
+        )
+        if use_chatgpt:
+            from . import auth
+
+            if self.api_base is not None:
+                raise ConfigurationError("Custom api_base is unavailable with auth='chatgpt'.")
+            if self.auth == "auto" and auth._read_state()["active"] is None:
+                raise ConfigurationError(
+                    "Run ap.sign_in() to use your ChatGPT plan, or set AUGPLOT_MODEL "
+                    "and the provider's credentials."
+                )
+            if self.model is None:
+                self._chatgpt_profile_id, model = auth.connection()
+            else:
+                model = self.model
+                self._chatgpt_profile_id = auth._read_state()["active"]
+            if not isinstance(model, str) or not model.strip() or "/" in model:
+                raise ConfigurationError(
+                    "Use a ChatGPT model id from ap.models(), without a prefix."
+                )
+            self._transport = "chatgpt"
+            self.model = model
+            self._chatgpt_configuration = (model, None)
+            return self._chatgpt_configuration
         if not isinstance(model, str) or not model.strip():
             raise ConfigurationError("Set AUGPLOT_MODEL or pass model='provider/model-name'.")
-        api_base = self.api_base if self.api_base is not None else os.getenv("AUGPLOT_API_BASE")
+        self._transport = "api_key"
         return model, api_base
 
     @staticmethod
@@ -145,17 +181,32 @@ class _Visualization:
         code = None
         failures = []
         total_attempts = self.max_repairs + 1
+        if self._transport == "chatgpt":
+            from .auth import MANAGE_USAGE_URL, _profile, _read_state
+
+            _, account = _profile(_read_state(), self._chatgpt_profile_id)
+            label = " ".join(account["label"].split())
+            print(
+                f"Augplot: {label}; model={model}; Using ChatGPT plan. "
+                f"Manage usage: {MANAGE_USAGE_URL}"
+            )
         for attempt in range(total_attempts):
             number = attempt + 1
             action = "plotting" if attempt == 0 else "repairing"
             print(f"Augplot: {action}... attempt {number}/{total_attempts}", flush=True)
             with _SlowRequestNotice(number, total_attempts):
+                connection_options = {}
+                if self._transport == "chatgpt":
+                    connection_options = {
+                        "auth": "chatgpt", "profile_id": self._chatgpt_profile_id,
+                    }
                 response = provider.complete(
                     model=model,
                     messages=messages,
                     api_base=api_base,
                     timeout=self.timeout,
                     response_format=RESPONSE_FORMAT,
+                    **connection_options,
                 )
             print("Augplot: checking generated plotting code...", flush=True)
             candidate_code = None
@@ -221,6 +272,8 @@ class _Visualization:
             "max_profile_chars": self.max_profile_chars,
             "prompt": prompt,
         }
+        if self._transport == "chatgpt":
+            settings["transport"] = "chatgpt"
         if refining:
             settings.update(
                 parent=self._record["revision"] if self._record else None,

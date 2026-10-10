@@ -44,6 +44,12 @@ jobs:
             'seaborn==0.13.0' \
             'ipython==8.18.0' \
             'litellm==1.60.0' \
+            'openai==2.0.0' \
+            'httpx==0.27.0' \
+            'PyJWT[crypto]==2.10.0' \
+            'keyring==25.0.0' \
+            'platformdirs==4.3.0' \
+            'filelock==3.16.0' \
             'pytest==8.0.0' \
             'nbclient==0.10.0' \
             'nbformat==5.10.0' \

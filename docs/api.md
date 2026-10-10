@@ -3,6 +3,41 @@
 The README is the shortest path to a first chart. This page covers Augplot's complete
 public notebook workflow.
 
+## Sign in and choose a model
+
+ChatGPT sign-in is included in the standard `pip install augplot`. An eligible Plus or
+Pro account can authorize access to its plan's Codex / ChatGPT Work allowance without
+entering an API key. Extra credits are optional; manage whether other apps may use them
+after included usage runs out in ChatGPT's Usage settings.
+See [OpenAI's user guide](https://learn.chatgpt.com/docs/sign-in-with-chatgpt).
+
+```python
+import augplot as ap
+
+ap.sign_in()               # Continue with ChatGPT in your system browser.
+ap.models()                # DataFrame: id, name, selected.
+ap.set_model("model-id")    # Save a listed ID as this account's default.
+```
+
+`sign_in(profile_id=None, *, new_account=False, timeout=180)` remembers the connection
+through the operating system's secure credential store. It requires a secure storage
+backend and returns safe account information, never tokens. Sign-in and permission to
+use the plan are separate: an account without plan-use permission cannot generate charts.
+Importing Augplot does not sign in or contact a provider. Later sessions can reuse the
+saved connection; plotting never opens the sign-in browser automatically.
+
+`accounts()` returns dictionaries with `profile_id`, `label`, `connected`, `plan_enabled`,
+`model`, and `active`, reading saved metadata without contacting OpenAI or accessing
+credentials. Use `select_account(profile_id)` to change the active account,
+`sign_in(new_account=True)` to connect another, and `sign_out(profile_id=None)` to revoke
+and remove the selected connection's local credentials.
+
+`models()` lists the selected account's available models, which can differ from the
+ChatGPT picker and API catalog. Augplot chooses the first visible catalog model when no
+default is saved. `set_model(model_id)` validates and remembers a catalog ID per account.
+It affects new charts; an existing chart keeps its original account and model for later refinements.
+An explicit `model=` overrides the default for a single chart.
+
 ## Create a chart
 
 ```python
@@ -19,6 +54,7 @@ figure by default.
 plt = ap.plot(
     data,
     prompt="auto",
+    auth="auto",
     model=None,
     backend="auto",
     display_format="retina",
@@ -36,7 +72,8 @@ plt = ap.plot(
 | Option | Meaning |
 | --- | --- |
 | `prompt` | Visualization instruction; `"auto"` asks Augplot to choose. |
-| `model` | LiteLLM model identifier with strict response-schema support. Defaults to `AUGPLOT_MODEL`. |
+| `auth` | `"auto"` preserves explicit API-provider configuration, otherwise uses the saved ChatGPT connection. `"chatgpt"` or `"api_key"` selects a route explicitly. |
+| `model` | With `auth="chatgpt"`, a catalog ID, defaulting to the saved account choice. For API providers, a LiteLLM model identifier with strict response-schema support, defaulting to `AUGPLOT_MODEL`. |
 | `backend` | `"auto"`, `"matplotlib"`, or `"seaborn"`. |
 | `display_format` | Static notebook output: `"retina"`, `"png"`, or `"svg"`. |
 | `api_base` | Custom provider endpoint. Defaults to `AUGPLOT_API_BASE`. |
@@ -48,12 +85,18 @@ plt = ap.plot(
 | `show` | Display the resulting figure in the notebook. |
 | `regenerate` | Request new code instead of replaying the matching saved step. |
 
+For ChatGPT generation, prefer `auth="chatgpt"` when an old `AUGPLOT_MODEL` environment
+variable is still set. Custom `api_base` endpoints are unsupported on this route.
+Use [API-provider setup](../README.md#api-provider-setup) for an API-key workflow.
+Authentication, permission, or usage failures never switch to another billing route.
+
 The profile includes bounded category counts from the full input. See
 [model data and privacy](model-data-and-privacy.md) for the model-facing payload and
 the limits of `sample_rows` and `max_profile_chars`.
 
 Fresh generations print the current attempt (`plotting` or `repairing`) and when returned
 code is checked. A request still waiting after 20 seconds prints another status line.
+ChatGPT requests identify the account and model and include a link to manage usage.
 Saved-history replays do not make model requests or print these progress messages.
 
 ## Refine the current chart
@@ -162,6 +205,7 @@ All public exceptions inherit from `ap.AugplotError`:
 | Exception | Meaning |
 | --- | --- |
 | `ap.ConfigurationError` | Invalid options or missing model configuration. |
+| `ap.AuthenticationError` | ChatGPT sign-in, credential storage, session, or plan permission failure. |
 | `ap.DataError` | Unsupported or unsafe-to-profile data. |
 | `ap.ProviderError` | Provider authentication, connectivity, or request failure. |
 | `ap.GenerationError` | Generated source or saved source failed validation/execution. |
@@ -176,3 +220,32 @@ the directory cannot be written, the error still raises and `diagnostics_path` i
 See [visualization history](visualization-history.md) for cache keys, branching,
 regeneration, and replay behavior. See [generated-code guardrails](generated-code-guardrails.md)
 for validation, repair, and rejected-code behavior.
+
+## Manually check the sign-in workflow
+
+Most authentication, model selection, streaming, and replay behavior is covered by
+offline tests with fake services. A real eligible account is needed to check the browser
+experience, account-specific model catalog, plan allowance, and chart quality:
+
+1. Run `ap.sign_in()`, grant plan-use permission, and inspect `ap.accounts()` and
+   `ap.models()`.
+2. Choose a listed ID with `ap.set_model()` and run the three example notebooks in order.
+   Their setup cells skip browser sign-in when an active connection already exists.
+3. Add `regenerate=True` to the initial `ap.plot()` call and selected `refine()` calls
+   to exercise fresh inference; verify `cache_hit` is false and inspect the figure,
+   explanation, and exported Python. Remove the flag after checking.
+4. Restart the kernel and confirm the connection and model choice persist. Change the
+   default and check that a new chart uses it while an existing chart retains its model.
+5. Sign out with `ap.sign_out()`. The saved default remains available for cached replay;
+   fresh generation should explain how to reconnect.
+
+Live checks consume plan usage and remain opt-in. Dataset downloads can require internet
+independently of model generation; the cross-validation notebook uses inline data.
+
+After signing in locally, you can also run an opt-in automated smoke test with real
+ChatGPT generation and refinement. It reuses your connection without opening a browser
+and consumes plan usage:
+
+```bash
+AUGPLOT_LIVE_CHATGPT_TEST=1 python -m pytest -m live
+```
