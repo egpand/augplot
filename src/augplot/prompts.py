@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "26"
+PROMPT_VERSION = "27"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -85,6 +85,8 @@ Keep static allocations and plot layouts modest.
 # Figure quality
 
 Use accurate labels, units and scales; state aggregation and uncertainty honestly.
+Match trend complexity to data support. For descriptive guides, fit locally to
+populated summaries; stop at gaps and omit unstable or unsupported curves.
 Emphasize requested observations, categories, or aggregates without hiding data.
 Keep colors restrained and text readable. Make the main title visibly larger than axis
 labels and ticks. Adjust size and layout to prevent overlap; use legends for repeated

@@ -18,6 +18,10 @@ Execution exposes a limited set of builtins, including `object` for NumPy annota
 arrays. Pandas and Python date formatting can import their internal `time` helper;
 generated source still cannot import `time` directly.
 
+Generation guidance matches trend complexity to data support, favors local descriptive
+guides, stops at gaps, and omits unstable or unsupported curves. Fit quality still
+requires review of the figure and generated method.
+
 ## Security checks
 
 The validator rejects:
