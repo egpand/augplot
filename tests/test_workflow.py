@@ -137,6 +137,21 @@ def test_repair_once_and_sanitize_diagnostics(fake_model):
     assert "SECRET_RAW_VALUE" not in diagnostic["diagnostic"]
 
 
+def test_repair_receives_undefined_generated_name(fake_model):
+    bad = ARRAY_CODE.replace("ax.plot(data)", "ax.plot(missing_values)")
+    calls = fake_model(response(bad), response(ARRAY_CODE))
+
+    viz = plot([17, 23], show=False)
+
+    assert viz.figure is not None
+    assert len(calls) == 2
+    diagnostic = json.loads(calls[1]["messages"][-1]["content"])["diagnostic"]
+    assert "NameError" in diagnostic
+    assert "missing_values" in diagnostic
+    assert "17" not in diagnostic
+    assert "23" not in diagnostic
+
+
 def test_slow_generation_reports_attempts_and_waiting(monkeypatch):
     from augplot import core, provider
 

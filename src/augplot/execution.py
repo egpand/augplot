@@ -41,6 +41,7 @@ _BUILTINS = {
     "max",
     "min",
     "next",
+    "object",
     "range",
     "reversed",
     "round",
@@ -686,16 +687,37 @@ def execute(code, data, *, backend, title=None, figsize=None):
     except GenerationError:
         raise
     except Exception as exc:
-        trace, line = exc.__traceback__, None
+        trace, line, origin = exc.__traceback__, None, None
         while trace is not None:
             if trace.tb_frame.f_code.co_filename == "<augplot-generated>":
                 line = trace.tb_lineno
+            origin = trace
             trace = trace.tb_next
         detail = (
             "Scatter x and y must have the same number of values."
             if (isinstance(exc, ValueError) and str(exc) == "x and y must be the same size")
             else None
         )
+        if isinstance(exc, NameError):
+            name = exc.name
+            # Report only a bounded name referenced at the generated failure site;
+            # library-internal names and raw exception messages may contain private data.
+            if (
+                isinstance(name, str)
+                and len(name) <= 64
+                and name.isidentifier()
+                and not name.startswith("_")
+                and origin is not None
+                and origin.tb_frame.f_code.co_filename == "<augplot-generated>"
+                and any(
+                    isinstance(node, ast.Name)
+                    and isinstance(node.ctx, ast.Load)
+                    and node.id == name
+                    and node.lineno == origin.tb_lineno
+                    for node in ast.walk(tree)
+                )
+            ):
+                detail = f"Name {name!r} is not defined. Define it before use."
         raise GenerationError(
             f"Plot execution failed ({type(exc).__name__})"
             + (f" at generated line {line}." if line else ".")

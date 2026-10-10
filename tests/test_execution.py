@@ -249,6 +249,121 @@ def test_library_internal_imports_do_not_enable_generated_imports_or_module_trav
     assert_rejected_by(code, rule, backend="matplotlib")
 
 
+def test_object_arrays_preserve_annotation_labels_of_different_lengths():
+    code = '''def plot_data(data, *, title=None, figsize=None):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    labels = np.full(len(data), "", dtype=object)
+    for index, value in enumerate(data):
+        labels[index] = f"{value:g} passengers"
+    fig, ax = plt.subplots()
+    ax.plot(data)
+    for index, label in enumerate(labels):
+        ax.text(index, data[index], label)
+    return fig
+'''
+
+    figure = execute(code, [1, 22, 333.5, 1000000], backend="matplotlib")
+
+    assert [text.get_text() for text in figure.axes[0].texts] == [
+        "1 passengers", "22 passengers", "333.5 passengers", "1e+06 passengers"
+    ]
+
+
+def test_calendar_heatmap_supports_object_dtype_annotation_array():
+    code = '''def plot_data(data, *, title=None, figsize=None):
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    frame = data.copy()
+    frame["month_number"] = pd.to_datetime(frame["month"], format="%b").dt.month
+    matrix = frame.pivot(index="year", columns="month_number", values="passengers")
+    matrix = matrix.reindex(columns=range(1, 13))
+    values = matrix.to_numpy(dtype=float)
+    annotations = np.full(values.shape, "", dtype=object)
+    for row, column in np.argwhere(np.isfinite(values)):
+        annotations[row, column] = f"{values[row, column]:g}"
+    labels = [pd.Timestamp(2000, month, 1).strftime("%b") for month in range(1, 13)]
+    fig, ax = plt.subplots(figsize=figsize or (12, 5))
+    sns.heatmap(matrix, annot=annotations, fmt="", xticklabels=labels, ax=ax)
+    ax.set_title(title or "Annotated flight calendar")
+    return fig
+'''
+    months = pd.date_range("2000-01-01", periods=12, freq="MS").strftime("%b").tolist()
+    values = [1, 22, 333.5, 1000000] + list(range(104, 124))
+    data = pd.DataFrame(
+        {"year": [1949] * 12 + [1950] * 12, "month": months * 2, "passengers": values}
+    ).sample(frac=1, random_state=1)
+
+    figure = execute(code, data, backend="seaborn")
+
+    axis = figure.axes[0]
+    assert len(figure.axes) == 2
+    assert [label.get_text() for label in axis.get_xticklabels()] == months
+    assert [label.get_text() for label in axis.get_yticklabels()] == ["1949", "1950"]
+    assert [text.get_text() for text in axis.texts] == [f"{value:g}" for value in values]
+
+
+@pytest.mark.parametrize(
+    "statement", ["object.__class__", "object.__subclasses__()", "object.__getattribute__"]
+)
+def test_object_dtype_support_does_not_enable_private_reflection(statement):
+    assert_rejected_by(ARRAY_CODE.replace("ax.plot(data)", statement), "private_access")
+
+
+def test_name_error_identifies_missing_name_from_generated_source():
+    code = ARRAY_CODE.replace("ax.plot(data)", "ax.plot(missing_observations)")
+
+    with pytest.raises(GenerationError) as caught:
+        execute(code, [1, 2], backend="matplotlib")
+
+    assert "Name 'missing_observations' is not defined" in str(caught.value)
+    assert "Define it before use" in str(caught.value)
+
+
+def test_name_error_omits_oversized_generated_name():
+    name = "a" * 65
+    code = ARRAY_CODE.replace("ax.plot(data)", f"ax.plot({name})")
+
+    with pytest.raises(GenerationError) as caught:
+        execute(code, [1, 2], backend="matplotlib")
+
+    assert "NameError" in str(caught.value)
+    assert name not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "name", ["library_internal", "_private_name", "name containing spaces", "a" * 65, None]
+)
+def test_name_error_omits_library_names_and_raw_data(monkeypatch, name):
+    def fail(*args, **kwargs):
+        raise NameError("SECRET_RAW_DATA_VALUE", name=name)
+
+    monkeypatch.setattr("matplotlib.axes.Axes.plot", fail)
+
+    with pytest.raises(GenerationError) as caught:
+        execute(ARRAY_CODE, [1, 2], backend="matplotlib")
+
+    assert "NameError" in str(caught.value)
+    assert "SECRET_RAW_DATA_VALUE" not in str(caught.value)
+    assert "is not defined" not in str(caught.value)
+
+
+def test_name_error_omits_library_origin_even_when_name_is_in_source(monkeypatch):
+    def fail(*args, **kwargs):
+        raise NameError("SECRET_RAW_DATA_VALUE", name="data")
+
+    monkeypatch.setattr("matplotlib.axes.Axes.plot", fail)
+
+    with pytest.raises(GenerationError) as caught:
+        execute(ARRAY_CODE, [1, 2], backend="matplotlib")
+
+    assert "NameError" in str(caught.value)
+    assert "SECRET_RAW_DATA_VALUE" not in str(caught.value)
+    assert "Name 'data'" not in str(caught.value)
+
+
 @pytest.mark.parametrize(
     "statement",
     [
