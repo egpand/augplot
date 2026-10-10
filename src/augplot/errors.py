@@ -1,5 +1,6 @@
 """Public exceptions. Provider/runtime diagnostics never include raw data or credentials."""
 
+from pathlib import Path
 from typing import TypedDict
 
 
@@ -30,6 +31,10 @@ class ScopeError(AugplotError, ValueError):
     """The request needs upstream modeling or prediction inputs, not plotting code."""
 
 
+class InputRequiredError(AugplotError, ValueError):
+    """A supported plot needs a choice or input the request did not provide."""
+
+
 class GenerationError(AugplotError):
     """The model did not produce a valid, executable plot."""
 
@@ -39,7 +44,9 @@ class GenerationError(AugplotError):
         *,
         code: str | None = None,
         violations: list[ValidationViolation] | None = None,
+        diagnostics_path: Path | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.violations = list(violations or [])
+        self.diagnostics_path = diagnostics_path

@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from augplot import DataError
-from augplot.profiling import copy_data, profile_data
+from augplot.profiling import _category_counts, copy_data, profile_data
 
 
 @pytest.mark.parametrize(
@@ -40,8 +40,120 @@ def test_profile_is_bounded_and_uses_spread_sample():
 
 
 def test_samples_can_be_disabled():
-    profile = profile_data(pd.DataFrame({"a": [1, 2]}), sample_rows=0)
+    profile = profile_data(pd.DataFrame({"a": ["x", "y"]}), sample_rows=0)
     assert profile["data"]["sample_rows"] == []
+    summary = profile["data"]["columns"][0]["category_counts"]
+    assert {entry["value"] for entry in summary["common"] + summary["rare"]} == {"x", "y"}
+
+
+def test_full_category_counts_include_rare_labels_outside_row_sample():
+    labels = ["Main sequence"] * 1001
+    labels[1] = "White dwarfs"
+    labels[2] = "main sequence"
+    labels[3] = None
+    frame = pd.DataFrame({"stellar_class": labels})
+
+    profile = profile_data(frame)
+
+    assert all(
+        row["values"][0] == "Main sequence" for row in profile["data"]["sample_rows"]
+    )
+    summary = profile["data"]["columns"][0]["category_counts"]
+    assert summary["distinct"] == 3
+    assert summary["missing"] == 1
+    assert summary["omitted_distinct"] == 0
+    assert {entry["value"]: entry["count"] for entry in summary["common"] + summary["rare"]} == {
+        "Main sequence": 998,
+        "White dwarfs": 1,
+        "main sequence": 1,
+    }
+
+
+def test_series_boolean_and_declared_numeric_categories():
+    flag = pd.Series([True, False, pd.NA, False], dtype="boolean", name="flag")
+    summary = profile_data(flag, sample_rows=0)["data"]["category_counts"]
+    assert summary["missing"] == 1
+    assert {entry["value"]: entry["count"] for entry in summary["common"] + summary["rare"]} == {
+        False: 2,
+        True: 1,
+    }
+
+    categories = pd.Series(pd.Categorical([1, 2, 1, None]))
+    summary = profile_data(categories)["data"]["category_counts"]
+    assert summary["missing"] == 1
+    assert summary["distinct"] == 2
+    assert "category_counts" not in profile_data(pd.Series([1, 2, 1]))["data"]
+
+
+@pytest.mark.parametrize(
+    "dtype, values",
+    [
+        ("float64", [np.nan, np.nan]),
+        ("float64", [np.nan, 1.0]),
+        ("Float64", [pd.NA, pd.NA]),
+        ("Int64", [pd.NA, 1]),
+        ("int64", [1, 2]),
+        ("complex128", [complex(np.nan, 0), 1j]),
+    ],
+)
+def test_numeric_category_counts_do_not_scan_values(monkeypatch, dtype, values):
+    series = pd.Series(values, dtype=dtype)
+
+    def reject_iteration(self):
+        raise AssertionError("Numeric category counting must not scan observations")
+
+    monkeypatch.setattr(pd.Series, "__iter__", reject_iteration)
+    assert _category_counts(series) is None
+
+
+@pytest.mark.parametrize("container", [list, tuple])
+def test_record_fields_get_exact_category_counts(container):
+    records = container([{"kind": "A"}, {"kind": "B"}, {"kind": "A"}, {}])
+    profile = profile_data(records, sample_rows=0)
+
+    assert profile["data"]["sample"] == []
+    assert profile["data"]["fields"][0]["name"] == "kind"
+    summary = profile["data"]["fields"][0]["category_counts"]
+    assert (summary["distinct"], summary["missing"], summary["omitted_distinct"]) == (2, 1, 0)
+    assert {entry["value"]: entry["count"] for entry in summary["common"] + summary["rare"]} == {
+        "A": 2,
+        "B": 1,
+    }
+
+
+def test_high_cardinality_shows_common_and_rare_with_omitted_count():
+    labels = [f"group_{i:02d}" for i in range(30) for _ in range(i + 1)]
+    summary = profile_data(pd.Series(labels))["data"]["category_counts"]
+
+    assert summary["distinct"] == 30
+    assert summary["omitted_distinct"] == 10
+    assert [entry["value"] for entry in summary["common"]] == [
+        f"group_{i:02d}" for i in range(29, 19, -1)
+    ]
+    assert [entry["value"] for entry in summary["rare"]] == [
+        f"group_{i:02d}" for i in range(10)
+    ]
+    assert [entry["count"] for entry in summary["rare"]] == list(range(1, 11))
+
+    bounded = profile_data(pd.Series(labels), max_chars=500)
+    trimmed = bounded["data"]["category_counts"]
+    assert len(json.dumps(bounded)) <= 500
+    assert trimmed["omitted_distinct"] == 30 - len(trimmed["common"]) - len(trimmed["rare"])
+    assert trimmed["common"] and trimmed["rare"]
+
+
+def test_profile_budget_trims_samples_before_category_counts():
+    frame = pd.DataFrame(
+        {"kind": ["common"] * 30 + ["rare"]},
+        index=[f"row-{i}-" + "x" * 200 for i in range(31)],
+    )
+    profile = profile_data(frame, max_chars=800)
+
+    assert len(json.dumps(profile)) <= 800
+    assert len(profile["data"]["sample_rows"]) < 5
+    summary = profile["data"]["columns"][0]["category_counts"]
+    assert summary["distinct"] == 2
+    assert summary["omitted_distinct"] == 0
 
 
 def test_duplicate_columns_and_nonstring_keys():

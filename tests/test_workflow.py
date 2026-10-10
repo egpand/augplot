@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -13,7 +14,14 @@ import pandas as pd
 import pytest
 from conftest import ARRAY_CODE, CV_CODE, DF_CODE, response
 
-from augplot import ConfigurationError, GenerationError, ProviderError, ScopeError, plot
+from augplot import (
+    ConfigurationError,
+    GenerationError,
+    InputRequiredError,
+    ProviderError,
+    ScopeError,
+    plot,
+)
 from augplot.core import _Visualization
 
 
@@ -166,7 +174,7 @@ def test_slow_generation_reports_attempts_and_waiting(monkeypatch):
     ]
 
 
-@pytest.mark.parametrize("max_repairs", [0, 1])
+@pytest.mark.parametrize("max_repairs", [0, 1, 2])
 def test_quick_generation_reports_attempt_and_history_replay_is_quiet(
     fake_model, monkeypatch, max_repairs
 ):
@@ -200,6 +208,42 @@ def test_repair_receives_validator_reason(fake_model):
     assert "generated line 4" in diagnostic
 
 
+@pytest.mark.parametrize(
+    ("bad_statement", "expected_guidance"),
+    [
+        (
+            'column = "value"\n    data.agg(result=(column, "median"))',
+            "literal source-column strings",
+        ),
+        (
+            "fitted = data\n    ax.plot(fitted(data))",
+            "np.polyval(coefficients, x)",
+        ),
+    ],
+)
+def test_repair_explains_supported_replacements(fake_model, bad_statement, expected_guidance):
+    bad = ARRAY_CODE.replace("ax.plot(data)", bad_statement)
+    calls = fake_model(response(bad), response(ARRAY_CODE))
+
+    assert plot([1, 2], show=False).figure is not None
+
+    repair = json.loads(calls[1]["messages"][-1]["content"])
+    assert expected_guidance in repair["guidance"]
+    assert "Recheck the entire function" in repair["repair"]
+
+
+def test_two_repairs_are_available_as_opt_in(fake_model):
+    first = ARRAY_CODE.replace("ax.plot(data)", "data.agg(1)")
+    second = ARRAY_CODE.replace("ax.plot(data)", "data.agg(2)")
+    calls = fake_model(response(first), response(second), response(ARRAY_CODE))
+
+    viz = plot([1, 2], max_repairs=2, show=False)
+
+    assert viz.figure is not None
+    assert len(calls) == 3
+    assert viz.code == ARRAY_CODE
+
+
 def test_repair_receives_safe_scatter_shape_hint(fake_model):
     bad = ARRAY_CODE.replace("ax.plot(data)", "ax.scatter(0, data)")
     calls = fake_model(response(bad), response(ARRAY_CODE))
@@ -228,8 +272,56 @@ def test_failure_preserves_state_and_exposes_candidate(cv_data, fake_model):
     with pytest.raises(GenerationError) as caught:
         viz.refine("Change it", show=False)
     assert caught.value.code == bad
+    assert caught.value.diagnostics_path.parent.parent == viz.history_path.parent
     assert (viz.code, viz.figure, viz.explanation, viz.profile) == previous
     assert len(calls) == 3
+
+
+def test_failed_attempts_are_saved_beside_history(tmp_path, fake_model):
+    first = ARRAY_CODE.replace("ax.plot(data)", "data.agg(1)")
+    second = ARRAY_CODE.replace("ax.plot(data)", "data.agg(2)")
+    fake_model(response(first), response(second))
+
+    with pytest.raises(GenerationError) as caught:
+        plot([1, 2], show=False)
+
+    directory = caught.value.diagnostics_path
+    assert directory is not None
+    assert directory.parent.name == "failures"
+    assert directory.parents[2] == tmp_path / ".augplot" / "plots"
+    assert str(directory) in str(caught.value)
+    assert caught.value.code == second
+    assert (directory / "attempt-1.py").read_text() == first
+    assert (directory / "attempt-2.py").read_text() == second
+    attempts = json.loads((directory / "errors.json").read_text())["attempts"]
+    assert [item["attempt"] for item in attempts] == [1, 2]
+    assert all(".agg at generated line" in item["error"] for item in attempts)
+    assert all(item["violations"][0]["rule"] == "dynamic_dispatch" for item in attempts)
+    assert all(item["response"] is None for item in attempts)
+
+
+def test_malformed_final_response_is_saved_for_debugging(fake_model):
+    fake_model("invalid response")
+
+    with pytest.raises(GenerationError) as caught:
+        plot([1, 2], max_repairs=0, show=False)
+
+    directory = caught.value.diagnostics_path
+    assert directory is not None
+    assert (directory / "response-1.txt").read_text() == "invalid response"
+    attempts = json.loads((directory / "errors.json").read_text())["attempts"]
+    assert attempts[0]["source"] is None
+    assert attempts[0]["response"] == "response-1.txt"
+
+
+def test_cache_dir_none_skips_failure_files(fake_model):
+    fake_model("invalid response")
+
+    with pytest.raises(GenerationError) as caught:
+        plot([1, 2], max_repairs=0, cache_dir=None, show=False)
+
+    assert caught.value.diagnostics_path is None
+    assert not Path(".augplot").exists()
 
 
 def test_repairs_disabled_and_provider_errors_not_repaired(fake_model):
@@ -268,6 +360,142 @@ def test_out_of_scope_request_stops_without_execution_or_repair(fake_model, monk
     assert not Path(".augplot").exists()
 
 
+def test_missing_input_stops_without_execution_or_repair(fake_model, monkeypatch):
+    from augplot import core
+
+    def unexpected_execution(*args, **kwargs):
+        raise AssertionError("A clarification request must not execute code")
+
+    monkeypatch.setattr(core, "execute", unexpected_execution)
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: False)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: pytest.fail("Scripts must not wait for input")
+    )
+    calls = fake_model(
+        json.dumps(
+            {
+                "status": "needs_input",
+                "code": "",
+                "explanation": "Which available metric should I use?",
+            }
+        )
+    )
+    with pytest.raises(InputRequiredError, match="Which available metric"):
+        plot({"score": [1, 2]}, prompt="Show another metric", show=False)
+    assert len(calls) == 1
+    assert not Path(".augplot").exists()
+
+
+def test_clarification_detects_only_a_live_ipython_kernel(monkeypatch):
+    import IPython
+
+    from augplot.core import _has_notebook_kernel
+
+    monkeypatch.setattr(IPython, "get_ipython", lambda: None)
+    assert not _has_notebook_kernel()
+    monkeypatch.setattr(IPython, "get_ipython", lambda: SimpleNamespace(kernel=None))
+    assert not _has_notebook_kernel()
+    monkeypatch.setattr(IPython, "get_ipython", lambda: SimpleNamespace(kernel=object()))
+    assert _has_notebook_kernel()
+
+
+def test_plot_clarification_retries_and_replays_answered_request(fake_model, monkeypatch):
+    from augplot import core
+
+    question = "Which available metric should I use?"
+    needs_input = json.dumps(
+        {"status": "needs_input", "code": "", "explanation": question}
+    )
+    calls = fake_model(needs_input, response(ARRAY_CODE), needs_input)
+    prompts = []
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: prompts.append(prompt) or "Use the measured temperature"
+    )
+
+    viz = plot([1, 2], prompt="Plot the selected metric", show=False)
+
+    assert prompts == [f"Augplot needs input: {question}\n> "]
+    assert viz.figure is not None
+    retry_context = json.loads(calls[1]["messages"][1]["content"])
+    assert retry_context["operation"] == "generate"
+    assert retry_context["request"].startswith("Plot the selected metric")
+    assert '"answer": "Use the measured temperature"' in retry_context["request"]
+    assert viz._prompt == retry_context["request"]
+
+    replay = plot([1, 2], prompt="Plot the selected metric", show=False)
+    assert replay.cache_hit
+    assert len(calls) == 3
+    assert prompts == [f"Augplot needs input: {question}\n> "] * 2
+    assert replay.history_path == viz.history_path
+
+
+def test_refine_clarification_uses_input_in_notebook_and_keeps_parent(fake_model, monkeypatch):
+    from augplot import core
+
+    question = "Which metric should I use?"
+    calls = fake_model(
+        response(ARRAY_CODE),
+        json.dumps({"status": "needs_input", "code": "", "explanation": question}),
+        response(ARRAY_CODE),
+    )
+    prompts = []
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: prompts.append(prompt) or "Use radius"
+    )
+    viz = plot([1, 2], show=False)
+    parent_revision = viz._record["revision"]
+
+    assert viz.refine("Show another metric", show=False) is viz
+
+    assert prompts == [f"Augplot needs input: {question}\n> "]
+    context = json.loads(calls[2]["messages"][1]["content"])
+    assert context["operation"] == "refine"
+    assert context["previous_code"] == ARRAY_CODE
+    assert context["original_request"] == "auto"
+    assert '"answer": "Use radius"' in context["request"]
+    assert viz._record["parent"] == parent_revision
+
+
+def test_clarification_is_bounded_and_preserves_fitted_state(fake_model, monkeypatch):
+    from augplot import core
+
+    needs_input = json.dumps(
+        {"status": "needs_input", "code": "", "explanation": "Specify a metric."}
+    )
+    calls = fake_model(response(ARRAY_CODE), needs_input, needs_input, needs_input)
+    viz = plot([1, 2], show=False)
+    before = (viz.code, viz.figure, viz.history_path, viz._record)
+    saved_files = set(Path(".augplot").rglob("*"))
+    answers = iter(["first", "second"])
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    with pytest.raises(InputRequiredError, match="Specify a metric"):
+        viz.refine("Use another metric", show=False)
+
+    assert len(calls) == 4
+    assert (viz.code, viz.figure, viz.history_path, viz._record) == before
+    assert set(Path(".augplot").rglob("*")) == saved_files
+
+
+def test_empty_clarification_answer_leaves_input_required(fake_model, monkeypatch):
+    from augplot import core
+
+    calls = fake_model(
+        json.dumps(
+            {"status": "needs_input", "code": "", "explanation": "Choose a metric."}
+        )
+    )
+    monkeypatch.setattr(core, "_has_notebook_kernel", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "  ")
+    with pytest.raises(InputRequiredError, match="Choose a metric"):
+        plot([1, 2], show=False)
+    assert len(calls) == 1
+    assert not Path(".augplot").exists()
+
+
 @pytest.mark.parametrize("operation", ["fit", "refine"])
 def test_scope_refusal_preserves_previous_visualization(fake_model, operation):
     calls = fake_model(
@@ -301,6 +529,27 @@ def test_payload_contains_profile_not_full_data(fake_model):
     assert len(json.dumps(context["data_profile"])) <= 20_000
     assert len(context["data_profile"]["data"]["sample"]) == 5
     assert calls[0]["response_format"]["json_schema"]["strict"] is True
+
+
+def test_generation_context_contains_rare_category_counts(fake_model):
+    frame = pd.DataFrame(
+        {
+            "spend": np.arange(10),
+            "revenue": np.arange(10) * 2,
+            "channel": ["common", "rare"] + ["common"] * 8,
+        }
+    )
+    calls = fake_model(response(DF_CODE))
+
+    plot(frame, show=False)
+
+    profile = json.loads(calls[0]["messages"][1]["content"])["data_profile"]
+    assert "rare" not in [row["values"][2] for row in profile["data"]["sample_rows"]]
+    summary = profile["data"]["columns"][2]["category_counts"]
+    assert {entry["value"]: entry["count"] for entry in summary["common"] + summary["rare"]} == {
+        "common": 9,
+        "rare": 1,
+    }
 
 
 def test_config_precedence_and_environment_resolved_at_call(fake_model, monkeypatch):

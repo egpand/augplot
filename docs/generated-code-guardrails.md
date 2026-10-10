@@ -37,6 +37,12 @@ frame.to_pickle("chart.pkl")
 fig.savefig("chart.png")
 ```
 
+For named Pandas `.agg`, use literal source-column strings and simple aggregation names
+in each tuple. If the column name is stored in a variable, aggregate the selected Series
+directly. For polynomial guide curves, evaluate coefficients with
+`np.polyval(coefficients, x)` instead of calling a stored `np.poly1d` object. Generation
+and repair prompts now include these patterns.
+
 The checks are intentionally modest. Data-sized loops and allocations are allowed,
 so a large input or expensive plotting operation can still use substantial CPU or
 memory. The AST rules reduce obvious side effects but cannot guarantee that every
@@ -45,10 +51,17 @@ where executing model-produced Python is unacceptable.
 
 ## Validation failures and saved plots
 
-Fresh model output receives at most the configured repair attempt (`max_repairs=1` by
-default). The repair request contains a sanitized validation diagnostic, not data
-values or a runtime exception message. If repair fails, `ap.plot()` raises
-`GenerationError`; rejected source is not executed, displayed, exported, or saved.
+Fresh model output receives at most the configured number of repair attempts
+(`max_repairs=1` by default, or 2 for three total attempts). Each repair request
+contains a sanitized validation diagnostic, not data values or a runtime exception
+message. If repair fails, `ap.plot()` raises
+`GenerationError`. Rejected source is not executed, displayed, exported, or saved as
+visualization history. With history enabled, Augplot saves an `errors.json` summary and
+each rejected candidate under `.augplot/plots/<request-root>/failures/failure-*/` by
+default. The request root includes the full-data fingerprint and generation settings.
+The exception message and `exc.diagnostics_path` give the directory. A malformed model
+response is saved as `response-N.txt` when no source can be parsed. `cache_dir=None`
+disables these files along with visualization history.
 
 ```python
 try:
@@ -57,7 +70,12 @@ except ap.GenerationError as exc:
     print(exc)
     print(exc.violations)
     print(exc.code)
+    print(exc.diagnostics_path)
 ```
+
+These files can contain generated source or response text with literal values from the
+request. Review them before sharing. Augplot does not save the input data, profile,
+credentials, or the full model request in the diagnostic directory.
 
 Saved source is revalidated on every replay. The validator version is part of the
 cache identity and metadata, so code accepted under an older policy is not silently

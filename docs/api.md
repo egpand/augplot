@@ -43,10 +43,14 @@ plt = ap.plot(
 | `sample_rows` | Rows included in the model-facing profile, from 0 to 100. |
 | `max_profile_chars` | Maximum serialized profile size, from 500 to 100,000. |
 | `timeout` | Provider timeout in seconds. |
-| `max_repairs` | Whether invalid generated code gets zero or one repair request. |
+| `max_repairs` | Number of repair requests after the initial attempt: 0, 1 (default), or 2. |
 | `cache_dir` | Visualization-history directory; `None` disables persistence. |
 | `show` | Display the resulting figure in the notebook. |
 | `regenerate` | Request new code instead of replaying the matching saved step. |
+
+The profile includes bounded category counts from the full input. See
+[model data and privacy](model-data-and-privacy.md) for the model-facing payload and
+the limits of `sample_rows` and `max_profile_chars`.
 
 Fresh generations print the current attempt (`plotting` or `repairing`) and when returned
 code is checked. A request still waiting after 20 seconds prints another status line.
@@ -61,6 +65,26 @@ plt.refine("Use one panel per region and label the largest value")
 `refine(prompt, *, show=True, regenerate=False)` updates the current chart. It returns
 the same object, so calls can be chained. Each refinement uses the current generated
 function as its parent.
+
+## Answer a plotting question
+
+If a chart needs a choice that the prompt and data do not settle, Augplot asks for it
+automatically when running in a Jupyter notebook kernel:
+
+```python
+viz = ap.plot(data, "Plot the selected metric")
+viz.refine("Use another metric")
+```
+
+Jupyter displays the standard `input()` field beneath the running cell. The answer is
+sent with the original request, and Augplot retries up to twice. A blank answer or an
+unresolved question raises `ap.InputRequiredError`. In a regular Python script or
+terminal, Augplot raises that error immediately without waiting for input. `fit()`
+uses the same behavior. Only a successful chart updates the current visualization or
+its history. The answer becomes part of that request's cache key, so a different answer
+creates a different saved chart. Rerunning the original prompt may ask again; giving
+the same answer to the same question replays the saved chart without another generation
+request.
 
 ## Reuse code with other data
 
@@ -141,7 +165,13 @@ All public exceptions inherit from `ap.AugplotError`:
 | `ap.DataError` | Unsupported or unsafe-to-profile data. |
 | `ap.ProviderError` | Provider authentication, connectivity, or request failure. |
 | `ap.GenerationError` | Generated source or saved source failed validation/execution. |
+| `ap.InputRequiredError` | A supported chart needs an essential input or choice. |
 | `ap.ScopeError` | The request requires work outside the selected visualization backend. |
+
+When all generation attempts fail, `GenerationError.diagnostics_path` points to a private
+directory under the matching visualization history root with rejected source and an
+`errors.json` summary. The exception message includes the path. If `cache_dir=None` or
+the directory cannot be written, the error still raises and `diagnostics_path` is `None`.
 
 See [visualization history](visualization-history.md) for cache keys, branching,
 regeneration, and replay behavior. See [generated-code guardrails](generated-code-guardrails.md)

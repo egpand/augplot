@@ -6,7 +6,7 @@ from conftest import ARRAY_CODE, response
 from notebook_charts import FLIGHTS_HEATMAP, FLIGHTS_LINES, PENGUIN_FACETS, PENGUIN_SCATTER
 from titanic_fixture import titanic_timeline_events
 
-from augplot import GenerationError, ScopeError
+from augplot import GenerationError, InputRequiredError, ScopeError
 from augplot.execution import execute, parse_response, validate_code
 
 TIMELINE_CODE = """def plot_data(data, *, title=None, figsize=None):
@@ -732,6 +732,7 @@ def test_accepts_single_json_fence():
         {"status": "ok", "code": "", "explanation": "Missing code"},
         {"status": "ok", "code": ARRAY_CODE, "explanation": "Fine", "extra": True},
         {"status": "out_of_scope", "code": ARRAY_CODE, "explanation": "Must be empty"},
+        {"status": "needs_input", "code": ARRAY_CODE, "explanation": "Must be empty"},
     ],
 )
 def test_rejects_responses_outside_unified_schema(payload):
@@ -746,6 +747,16 @@ def test_parses_unified_out_of_scope_response():
         "explanation": "Provide upstream predictions.",
     }
     with pytest.raises(ScopeError, match="upstream predictions"):
+        parse_response(json.dumps(payload))
+
+
+def test_parses_unified_needs_input_response():
+    payload = {
+        "status": "needs_input",
+        "code": "",
+        "explanation": "Which available metric should I use?",
+    }
+    with pytest.raises(InputRequiredError, match="Which available metric"):
         parse_response(json.dumps(payload))
 
 
@@ -796,6 +807,36 @@ def test_common_pandas_aggregation_and_index_assignment_are_allowed():
 """
     figure = execute(code, {"group": ["a", "b", "a"], "value": [1, 2, 3]}, backend="matplotlib")
     assert [patch.get_height() for patch in figure.axes[0].patches] == [4, 4]
+
+
+def test_named_aggregation_for_class_guide_curves_is_allowed():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    subset = data.copy()
+    subset["bin"] = pd.qcut(subset["x"], q=2, duplicates="drop")
+    guides = subset.groupby("bin", observed=True).agg(
+        x=("x", "mean"), y=("y", "median"), count=("y", "size")
+    )
+    fig, ax = plt.subplots()
+    ax.plot(guides["x"], guides["y"])
+    return fig
+"""
+    data = pd.DataFrame({"x": [0, 1, 2, 3, 4, 5], "y": [1, 2, 3, 4, 5, 6]})
+    figure = execute(code, data, backend="matplotlib")
+    assert len(figure.axes[0].lines) == 1
+    assert len(figure.axes[0].lines[0].get_xdata()) == 2
+
+
+def test_named_aggregation_cannot_dispatch_to_external_methods():
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    summary = data.groupby("group").agg(value=("value", "to_pickle"))
+    fig, ax = plt.subplots()
+    ax.plot(summary)
+    return fig
+"""
+    assert_rejected_by(code, "dynamic_dispatch")
 
 
 def test_series_map_with_local_label_mapping_is_allowed():

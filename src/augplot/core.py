@@ -6,14 +6,26 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 
 from . import provider
-from .errors import ConfigurationError, GenerationError
+from .diagnostics import save_generation_failure
+from .errors import ConfigurationError, GenerationError, InputRequiredError
 from .execution import VALIDATOR_VERSION, execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
 from .profiling import copy_data, profile_data, validate_data
-from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, system_prompt_for
+from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, repair_guidance, system_prompt_for
 
 _PROGRESS_DELAY_SECONDS = 20
+_MAX_CLARIFICATIONS = 2
+
+
+def _has_notebook_kernel():
+    """Whether a live IPython kernel can present an input request to the user."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return False
+    shell = get_ipython()
+    return shell is not None and getattr(shell, "kernel", None) is not None
 
 
 class _SlowRequestNotice:
@@ -71,8 +83,8 @@ class _Visualization:
             raise ConfigurationError("sample_rows must be an integer between 0 and 100.")
         if not isinstance(max_profile_chars, int) or not 500 <= max_profile_chars <= 100_000:
             raise ConfigurationError("max_profile_chars must be between 500 and 100,000.")
-        if not isinstance(max_repairs, int) or max_repairs not in (0, 1):
-            raise ConfigurationError("max_repairs must be 0 or 1.")
+        if not isinstance(max_repairs, int) or max_repairs not in (0, 1, 2):
+            raise ConfigurationError("max_repairs must be 0, 1, or 2.")
         if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
             raise ConfigurationError("timeout must be a finite positive number of seconds.")
         self.model = model
@@ -108,7 +120,10 @@ class _Visualization:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ConfigurationError("prompt must be 'auto' or a nonempty instruction string.")
 
-    def _generate(self, data, profile, prompt, *, previous_code=None, original_prompt=None):
+    def _generate(
+        self, data, profile, prompt, *, previous_code=None, original_prompt=None,
+        diagnostics_directory=None,
+    ):
         model, api_base = self._configuration()
         context = {
             "prompt_version": PROMPT_VERSION,
@@ -128,6 +143,7 @@ class _Visualization:
         ]
         last_error = None
         code = None
+        failures = []
         total_attempts = self.max_repairs + 1
         for attempt in range(total_attempts):
             number = attempt + 1
@@ -142,32 +158,52 @@ class _Visualization:
                     response_format=RESPONSE_FORMAT,
                 )
             print("Augplot: checking generated plotting code...", flush=True)
+            candidate_code = None
             try:
-                code, explanation = parse_response(response)
-                figure = execute(code, data, backend=self.backend)
-                return code, explanation, figure
+                candidate_code, explanation = parse_response(response)
+                figure = execute(candidate_code, data, backend=self.backend)
+                return candidate_code, explanation, figure
             except GenerationError as exc:
                 last_error = exc
+                if candidate_code is not None:
+                    code = candidate_code
+                failures.append(
+                    {
+                        "attempt": number,
+                        "code": candidate_code,
+                        "response": response,
+                        "error": str(exc),
+                        "violations": exc.violations,
+                    }
+                )
                 if attempt < self.max_repairs:
+                    repair = {
+                        "repair": (
+                            "Return corrected JSON per the contract. Recheck the entire "
+                            "function for other unsupported calls."
+                        ),
+                        "diagnostic": str(exc)[:500],
+                    }
+                    guidance = repair_guidance(exc.violations)
+                    if guidance is not None:
+                        repair["guidance"] = guidance
                     messages.extend(
                         [
                             {"role": "assistant", "content": response[:60_000]},
                             {
                                 "role": "user",
-                                "content": json.dumps(
-                                    {
-                                        "repair": "Return corrected JSON per the contract.",
-                                        "diagnostic": str(exc)[:500],
-                                    }
-                                ),
+                                "content": json.dumps(repair),
                             },
                         ]
                     )
+        diagnostics_path = save_generation_failure(failures, diagnostics_directory)
+        location = f" Diagnostics saved to {diagnostics_path}." if diagnostics_path else ""
         raise GenerationError(
             f"Could not generate a working visualization after {self.max_repairs + 1} "
-            f"attempt(s). {last_error}",
+            f"attempt(s). {last_error}{location}",
             code=code,
             violations=last_error.violations if last_error is not None else None,
+            diagnostics_path=diagnostics_path,
         ) from None
 
     def _resolve(self, data, profile, prompt, *, data_hash, regenerate, refining=False):
@@ -219,6 +255,9 @@ class _Visualization:
             prompt,
             previous_code=self.code if refining else None,
             original_prompt=self._prompt if refining else None,
+            diagnostics_directory=(
+                self._history.directory / root / "failures" if self._history is not None else None
+            ),
         )
         record, path = None, None
         if self._history is not None:
@@ -232,6 +271,35 @@ class _Visualization:
                 data_fingerprint=data_hash,
             )
         return code, explanation, figure, record, path, root, False
+
+    def _resolve_with_clarification(
+        self, data, profile, prompt, *, data_hash, regenerate, refining=False
+    ):
+        """Ask notebook users for missing input, preserving the request's history identity."""
+        exchanges = []
+        request = prompt
+        for attempt in range(_MAX_CLARIFICATIONS + 1):
+            try:
+                resolved = self._resolve(
+                    data, profile, request,
+                    data_hash=data_hash, regenerate=regenerate, refining=refining,
+                )
+                return resolved, request
+            except InputRequiredError as exc:
+                if attempt == _MAX_CLARIFICATIONS or not _has_notebook_kernel():
+                    raise
+                try:
+                    answer = input(f"Augplot needs input: {exc}\n> ")
+                except (EOFError, RuntimeError):
+                    raise exc from None
+                if not answer.strip():
+                    raise
+                exchanges.append({"question": str(exc), "answer": answer.strip()})
+                request = (
+                    f"{prompt}\n\nAdditional user input for this request:\n"
+                    + json.dumps(exchanges, ensure_ascii=False)
+                )
+        raise AssertionError("Clarification loop exhausted without a result.")
 
     def _accept(self, resolved):
         (
@@ -269,10 +337,10 @@ class _Visualization:
         profile = profile_data(data, sample_rows=self.sample_rows, max_chars=self.max_profile_chars)
         snapshot = copy_data(data)
         data_hash = fingerprint(snapshot) if self._history is not None else None
-        resolved = self._resolve(
-            snapshot, profile, prompt, data_hash=data_hash, regenerate=regenerate
+        resolved, effective_prompt = self._resolve_with_clarification(
+            snapshot, profile, prompt, data_hash=data_hash, regenerate=regenerate,
         )
-        self._data, self._prompt = snapshot, prompt
+        self._data, self._prompt = snapshot, effective_prompt
         self.profile, self._data_fingerprint = profile, data_hash
         self._accept(resolved)
         if show:
@@ -294,7 +362,7 @@ class _Visualization:
         """Reuse or generate a revision identified by its parent and instruction."""
         self._require_fit()
         self._validate_prompt(prompt)
-        resolved = self._resolve(
+        resolved, _ = self._resolve_with_clarification(
             self._data,
             self.profile,
             prompt,

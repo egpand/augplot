@@ -5,10 +5,10 @@ import builtins
 import json
 from contextlib import ExitStack
 
-from .errors import GenerationError, ScopeError
+from .errors import GenerationError, InputRequiredError, ScopeError
 from .profiling import copy_data
 
-VALIDATOR_VERSION = 9
+VALIDATOR_VERSION = 10
 MAX_SOURCE_CHARS = 50_000
 MAX_AST_NODES = 4_000
 MAX_LITERAL_ITEMS = 2_000
@@ -216,16 +216,17 @@ def parse_response(response: str) -> tuple[str, str]:
         raise GenerationError("Response does not match the Augplot response schema.")
     status, code, explanation = result["status"], result["code"], result["explanation"]
     if (
-        status not in {"ok", "out_of_scope"}
+        status not in {"ok", "needs_input", "out_of_scope"}
         or not isinstance(code, str)
         or not isinstance(explanation, str)
         or not explanation.strip()
     ):
         raise GenerationError("Response has invalid code or explanation fields.")
-    if status == "out_of_scope":
+    if status in {"needs_input", "out_of_scope"}:
         if code.strip():
-            raise GenerationError("Out-of-scope responses must have an empty code field.")
-        raise ScopeError(explanation.strip()[:1000])
+            raise GenerationError("Responses without a plot must have an empty code field.")
+        error_type = InputRequiredError if status == "needs_input" else ScopeError
+        raise error_type(explanation.strip()[:1000])
     if not code.strip():
         raise GenerationError("Successful responses must contain code.")
     if len(code) > MAX_SOURCE_CHARS:
@@ -396,9 +397,15 @@ class _Validator(ast.NodeVisitor):
                     if node.args
                     else next((item.value for item in node.keywords if item.arg == "func"), None)
                 )
-                if not self._safe_dispatch(target, mapping=name == "map"):
+                named_aggregation = (
+                    name in {"agg", "aggregate"}
+                    and not node.args
+                    and self._safe_named_aggregations(node.keywords)
+                )
+                if not self._safe_dispatch(target, mapping=name == "map") and not named_aggregation:
                     self.fail(
-                        "dynamic_dispatch", "Dynamic dispatch requires a simple safe function."
+                        "dynamic_dispatch",
+                        f".{name} at generated line {node.lineno} requires a simple safe function.",
                     )
             if (
                 name in _RESOURCE_ALLOCATORS
@@ -457,6 +464,23 @@ class _Validator(ast.NodeVisitor):
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and (node.value.id == "np" and node.attr in _MODULE_VALUES)
+        )
+
+    def _safe_named_aggregations(self, keywords):
+        """Allow Pandas named aggregations with literal columns and safe functions."""
+        return bool(keywords) and all(
+            keyword.arg is not None
+            and isinstance(keyword.value, ast.Tuple)
+            and len(keyword.value.elts) == 2
+            and isinstance(keyword.value.elts[0], ast.Constant)
+            and isinstance(keyword.value.elts[0].value, str)
+            and not (
+                isinstance(keyword.value.elts[1], ast.Constant)
+                and isinstance(keyword.value.elts[1].value, str)
+                and keyword.value.elts[1].value.startswith("_")
+            )
+            and self._safe_dispatch(keyword.value.elts[1])
+            for keyword in keywords
         )
 
     def _static_integer(self, node):

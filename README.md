@@ -45,6 +45,13 @@ For nested cross-validation results, try the
 with an inline results dictionary, successive refinements, and an intentional
 `ScopeError` example.
 
+For a one-sentence plotting request on an open stellar catalog, try the
+[Hertzsprung–Russell notebook](examples/hertzsprung-russell-one-shot.ipynb).
+Its committed output replays cached code and illustrates a successful chart; it does
+not measure fresh first-attempt success or compare model success rates. Full-input
+category context and supported-code guidance help generation and repair, but their
+effect on live one-shot success remains unmeasured.
+
 ## What can `data` be?
 
 `ap.plot(data)` accepts these nonempty, in-memory Python objects:
@@ -128,8 +135,9 @@ replay rules.
 ## Data and generated code
 
 Augplot sends the configured model a bounded profile of your data, including samples,
-field names, and statistics. This is not anonymization; `sample_rows=0` omits samples but
-not all schema or summary information.
+field names, statistics, and category counts. This is not anonymization; `sample_rows=0`
+omits samples but not all values or summaries. See
+[model data and privacy](docs/model-data-and-privacy.md) for exactly what Augplot sends.
 
 Generated Python is validated, then runs locally against a copy of the data. Rejected
 code never runs or saves. This is defense in depth, not an OS sandbox. See
