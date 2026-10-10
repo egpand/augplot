@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from augplot import DataError
-from augplot.profiling import copy_data, profile_data
+from augplot.profiling import _category_counts, copy_data, profile_data
 
 
 @pytest.mark.parametrize(
@@ -83,6 +83,27 @@ def test_series_boolean_and_declared_numeric_categories():
     assert summary["missing"] == 1
     assert summary["distinct"] == 2
     assert "category_counts" not in profile_data(pd.Series([1, 2, 1]))["data"]
+
+
+@pytest.mark.parametrize(
+    "dtype, values",
+    [
+        ("float64", [np.nan, np.nan]),
+        ("float64", [np.nan, 1.0]),
+        ("Float64", [pd.NA, pd.NA]),
+        ("Int64", [pd.NA, 1]),
+        ("int64", [1, 2]),
+        ("complex128", [complex(np.nan, 0), 1j]),
+    ],
+)
+def test_numeric_category_counts_do_not_scan_values(monkeypatch, dtype, values):
+    series = pd.Series(values, dtype=dtype)
+
+    def reject_iteration(self):
+        raise AssertionError("Numeric category counting must not scan observations")
+
+    monkeypatch.setattr(pd.Series, "__iter__", reject_iteration)
+    assert _category_counts(series) is None
 
 
 @pytest.mark.parametrize("container", [list, tuple])

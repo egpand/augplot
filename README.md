@@ -47,6 +47,10 @@ with an inline results dictionary, successive refinements, and an intentional
 
 For a one-sentence plotting request on an open stellar catalog, try the
 [Hertzsprung–Russell notebook](examples/hertzsprung-russell-one-shot.ipynb).
+Its committed output replays cached code and illustrates a successful chart; it does
+not measure fresh first-attempt success or compare model success rates. Full-input
+category context and supported-code guidance help generation and repair, but their
+effect on live one-shot success remains unmeasured.
 
 ## What can `data` be?
 

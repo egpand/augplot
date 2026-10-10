@@ -170,6 +170,13 @@ def _category_counts(values):
     """Count observed scalar categories without sampling or coercing numeric columns."""
     dtype = getattr(values, "dtype", None)
     categorical = isinstance(dtype, pd.CategoricalDtype)
+    if (
+        dtype is not None
+        and not categorical
+        and pd.api.types.is_numeric_dtype(dtype)
+        and not pd.api.types.is_bool_dtype(dtype)
+    ):
+        return None
     declared = categorical or (
         dtype is not None
         and (
