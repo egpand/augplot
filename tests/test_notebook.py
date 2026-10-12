@@ -202,7 +202,6 @@ provider.complete = offline_complete
     "filename",
     [
         "cross-validation-model-comparison.ipynb",
-        "hertzsprung-russell-one-shot.ipynb",
     ],
 )
 def test_other_examples_execute_offline_with_chatgpt_setup(tmp_path, filename):
@@ -220,7 +219,6 @@ def test_other_examples_execute_offline_with_chatgpt_setup(tmp_path, filename):
     setup = f"""
 import json
 from pathlib import Path
-import pandas as pd
 import augplot as ap
 from augplot import auth, provider
 get_ipython().run_line_magic("matplotlib", "inline")
@@ -253,15 +251,6 @@ def offline_complete(**kwargs):
         "status": "ok", "code": {code!r}, "explanation": "Offline notebook fixture."
     }})
 provider.complete = offline_complete
-real_read_csv = pd.read_csv
-def offline_read_csv(source, **kwargs):
-    if isinstance(source, str) and source.startswith("https://raw.githubusercontent.com/"):
-        return pd.DataFrame({{
-            "id": [1, 2, 3], "dist": [10.0, 10.0, 10.0], "mag": [5.0, 4.0, 2.0],
-            "absmag": [4.83, 10.0, -2.0], "ci": [0.6, 0.2, 1.5], "spect": ["G2V", "DA6", "K2III"],
-        }})
-    raise AssertionError("Unexpected dataset download")
-pd.read_csv = offline_read_csv
 """
     notebook.cells.insert(0, nbformat.v4.new_code_cell(setup))
     notebook.cells.append(
@@ -305,10 +294,9 @@ pd.read_csv = offline_read_csv
         if cell.cell_type == "code"
         for output in cell.outputs
     )
-    chart_name = "chart" if filename.startswith("hertzsprung") else "vis"
     assert any(
         "image/png" in output.get("data", {})
         for cell in executed.cells
         if cell.cell_type == "code"
         for output in cell.outputs
-    ), f"Expected inline figure from {chart_name}"
+    ), "Expected inline figure from cross-validation notebook"

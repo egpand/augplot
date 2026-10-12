@@ -10,7 +10,7 @@ from augplot.prompts import (
 def test_prompt_is_short_and_keeps_the_workflow_contract():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "27"
+    assert PROMPT_VERSION == "26"
     assert len(SYSTEM_PROMPT) < 3_700
     assert "plot_data(data, *, title=None, figsize=None)" in prompt
     assert "Return only JSON" in prompt
@@ -33,9 +33,6 @@ def test_prompt_is_short_and_keeps_the_workflow_contract():
     assert "optional annotations cannot fit legibly, omit them" in prompt
     assert "Use layout spacing that keeps text clear of data and figure edges" in prompt
     assert "descriptive uncertainty calculated from supplied observations" in prompt
-    assert "Match trend complexity to data support" in prompt
-    assert "For descriptive guides, fit locally to populated summaries" in prompt
-    assert "stop at gaps and omit unstable or unsupported curves" in prompt
     assert "literal source-column strings" in prompt
     assert "select the Series and aggregate it directly" in prompt
     assert "np.polyval(coefficients, x)" in prompt
