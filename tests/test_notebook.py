@@ -7,6 +7,7 @@ from pathlib import Path
 
 import nbformat
 import pandas as pd
+import pytest
 from jupyter_client import KernelManager
 from jupyter_client.kernelspec import KernelSpecManager
 from nbclient import NotebookClient
@@ -56,15 +57,28 @@ def test_example_in_real_kernel_with_mocked_inference(tmp_path):
 import os, json
 import numpy as np
 import pandas as pd
-def offline_key(prompt):
-    assert prompt == "OpenAI API key: "
-    return "offline-test-key"
-get_ipython().kernel.getpass = offline_key
 get_ipython().run_line_magic("matplotlib", "inline")
 from matplotlib_inline.config import InlineBackend
 InlineBackend.instance().figure_formats = {{"svg"}}
 from augplot import provider
 from augplot import datasets
+import augplot as ap
+from augplot import auth
+auth._directory = lambda: __import__("pathlib").Path("chatgpt-test-config")
+offline_signins = 0
+def offline_sign_in(*args, **kwargs):
+    global offline_signins
+    offline_signins += 1
+    state = {{
+        "version": 1, "host_id": "urn:uuid:offline", "active": "offline",
+        "profiles": {{"offline": {{
+            "label": "Offline test", "model": "offline-model",
+            "connected": True, "plan_enabled": True,
+        }}}},
+    }}
+    auth._write_state(state)
+    return ap.accounts()[0]
+ap.sign_in = offline_sign_in
 penguin_rows = []
 for species, island, base_length, base_depth in [
     ("Adelie", "Biscoe", 38, 18),
@@ -106,8 +120,8 @@ provider.complete = offline_complete
         if cell.cell_type == "code":
             if cell.id == "augplot-02":
                 cell.source += (
-                    '\nassert os.environ["AUGPLOT_MODEL"] == "openai/gpt-6-sol"\n'
-                    'assert os.environ["OPENAI_API_KEY"] == "offline-test-key"'
+                    '\nassert ap.accounts()[0]["model"] == "offline-model"\n'
+                    'assert ap.accounts()[0]["connected"]'
                 )
             if cell.id == "augplot-10":
                 cell.source += "\nassert set(biscoe_penguins['island']) == {'Biscoe'}"
@@ -143,6 +157,7 @@ provider.complete = offline_complete
         replay.cells.append(
             nbformat.v4.new_code_cell(
                 f"assert offline_calls == {expected_calls}\n"
+                f"assert offline_signins == {int(expected_calls > 0)}\n"
                 f"assert plt.code == {refined!r}\n"
                 f"assert flight_viz.cache_hit is {expected_calls == 0}\n"
                 f"assert flight_viz.code == {FLIGHTS_HEATMAP!r}\n"
@@ -169,9 +184,7 @@ provider.complete = offline_complete
         if cell.cell_type != "code":
             continue
         assert not any(output.output_type == "error" for output in cell.outputs)
-        if cell.id in {
-            "augplot-04", "augplot-07", "augplot-10", "augplot-14", "augplot-forecast"
-        }:
+        if cell.id in {"augplot-04", "augplot-07", "augplot-10", "augplot-14", "augplot-forecast"}:
             images = [output for output in cell.outputs if "image/png" in output.get("data", {})]
             assert len(images) == 1, f"Expected exactly one inline chart: {cell.source}"
             output = images[0]
@@ -183,3 +196,107 @@ provider.complete = offline_complete
     exported = tmp_path / "augplot_utils.py"
     assert exported.exists()
     assert "def plot_penguin_bills" in exported.read_text()
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "cross-validation-model-comparison.ipynb",
+    ],
+)
+def test_other_examples_execute_offline_with_chatgpt_setup(tmp_path, filename):
+    """Run each complete notebook, including authentication setup and exported code."""
+    notebook = nbformat.read(
+        Path(__file__).parents[1] / "examples" / filename,
+        as_version=4,
+    )
+    code = """def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=figsize or (8, 4))
+    ax.set_title(title or "Offline notebook check")
+    return fig
+"""
+    setup = f"""
+import json
+from pathlib import Path
+import augplot as ap
+from augplot import auth, provider
+get_ipython().run_line_magic("matplotlib", "inline")
+auth._directory = lambda: Path("chatgpt-test-config")
+signin_calls = 0
+def offline_signin(*args, **kwargs):
+    global signin_calls
+    signin_calls += 1
+    auth._write_state({{
+        "version": 1, "host_id": "urn:uuid:offline", "active": "offline",
+        "profiles": {{"offline": {{
+            "label": "Offline test", "model": "offline-model",
+            "connected": True, "plan_enabled": True,
+        }}}},
+    }})
+    return ap.accounts()[0]
+ap.sign_in = offline_signin
+inference_calls = 0
+def offline_complete(**kwargs):
+    global inference_calls
+    inference_calls += 1
+    assert kwargs["auth"] == "chatgpt"
+    assert kwargs["model"] == "offline-model"
+    assert kwargs["profile_id"] == "offline"
+    if "apple pie" in kwargs["messages"][1]["content"]:
+        return json.dumps({{
+            "status": "out_of_scope", "code": "", "explanation": "Plotting requests only."
+        }})
+    return json.dumps({{
+        "status": "ok", "code": {code!r}, "explanation": "Offline notebook fixture."
+    }})
+provider.complete = offline_complete
+"""
+    notebook.cells.insert(0, nbformat.v4.new_code_cell(setup))
+    notebook.cells.append(
+        nbformat.v4.new_code_cell("assert signin_calls == 1\nassert inference_calls > 0")
+    )
+    kernel_root = tmp_path / "kernels"
+    kernel_path = kernel_root / "augplot-test"
+    kernel_path.mkdir(parents=True)
+    (kernel_path / "kernel.json").write_text(
+        json.dumps(
+            {
+                "argv": [sys.executable, "-m", "ipykernel_launcher", "-f", "{connection_file}"],
+                "display_name": "Augplot tests",
+                "language": "python",
+                "env": {
+                    "IPYTHONDIR": str(tmp_path / "ipython"),
+                    "MPLCONFIGDIR": str(tmp_path / "matplotlib"),
+                },
+            }
+        )
+    )
+    manager = KernelManager(
+        kernel_name="augplot-test",
+        kernel_spec_manager=KernelSpecManager(kernel_dirs=[str(kernel_root)]),
+        connection_file=str(tmp_path / "connection.json"),
+    )
+    try:
+        executed = NotebookClient(
+            notebook,
+            km=manager,
+            timeout=90,
+            resources={"metadata": {"path": str(tmp_path)}},
+        ).execute()
+    finally:
+        if manager.has_kernel:
+            manager.shutdown_kernel(now=True)
+        manager.cleanup_resources()
+    assert not any(
+        output.output_type == "error"
+        for cell in executed.cells
+        if cell.cell_type == "code"
+        for output in cell.outputs
+    )
+    assert any(
+        "image/png" in output.get("data", {})
+        for cell in executed.cells
+        if cell.cell_type == "code"
+        for output in cell.outputs
+    ), "Expected inline figure from cross-validation notebook"

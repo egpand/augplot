@@ -14,21 +14,17 @@ Augplot supports Python 3.11 through 3.14.
 pip install augplot
 ```
 
-Configure a supported model and its provider credentials:
-
-```bash
-export AUGPLOT_MODEL="openai/YOUR_MODEL_ID"
-export OPENAI_API_KEY="..."
-```
-
-Then work directly with data already in your notebook:
+Sign in once with an eligible ChatGPT Plus or Pro account, then work directly with data
+already in your notebook. No API key is needed:
 
 ```python
 import augplot as ap
 
+ap.sign_in()  # Opens your browser; remembers the connection securely.
 flights = ap.load_sns_dataset("flights")
 viz = ap.plot(
     flights,
+    auth="chatgpt",
     prompt="Plot monthly airline passengers over time, with one line per year.",
 )
 viz.refine(
@@ -36,6 +32,20 @@ viz.refine(
 )
 viz.to_python(function_name="plot_monthly_passengers")
 ```
+
+Later sessions can skip `ap.sign_in()`. Model selection is automatic; optionally inspect
+the models available to your account and change the default for future charts:
+
+```python
+ap.models()               # Model IDs, names, and the selected default.
+ap.set_model("model-id")   # Use an ID returned by ap.models().
+```
+
+ChatGPT sign-in requires permission to use your plan's Codex / ChatGPT Work allowance.
+The available models may differ from the ChatGPT picker and the API catalog. Extra
+credits are optional and controlled in ChatGPT's Usage settings; included usage limits
+still apply. See [OpenAI's sign-in guide](https://learn.chatgpt.com/docs/sign-in-with-chatgpt).
+Existing API-key providers remain available; see [API-provider setup](#api-provider-setup).
 
 Open or download the [example notebook](examples/quickstart.ipynb) to try the complete
 workflow.
@@ -120,7 +130,26 @@ viz = ap.plot(
 See the [API and workflow reference](docs/api.md) for all `ap.plot()` options and
 inspectable attributes.
 
-Use `AUGPLOT_MODEL` for the model and `AUGPLOT_API_BASE` for a custom endpoint. Providers
+Use `auth="chatgpt"` to choose your saved ChatGPT connection explicitly. The default,
+`auth="auto"`, preserves explicitly configured API-provider workflows and otherwise
+uses that connection. A per-plot `model="model-id"` overrides the saved ChatGPT default
+when used with `auth="chatgpt"`. Changing the default does not change existing charts'
+refinement model.
+
+### API-provider setup
+
+For an API-key provider, configure a model and the provider's credentials:
+
+```bash
+export AUGPLOT_MODEL="openai/YOUR_MODEL_ID"
+export OPENAI_API_KEY="..."
+```
+
+```python
+viz = ap.plot(data, auth="api_key", prompt="Compare revenue by month")
+```
+
+Use `AUGPLOT_MODEL` for the model and `AUGPLOT_API_BASE` for a custom endpoint. API providers
 use the credentials expected by LiteLLM. The configured model must support strict JSON
 Schema responses and be recognized as such by LiteLLM; unsupported combinations raise
 `ConfigurationError` before inference.
@@ -131,6 +160,11 @@ Generated and refined plots are saved in `.augplot/plots`. Matching steps replay
 another model call. Use `regenerate=True` to request new code or `cache_dir=None` to
 disable persistence. See [visualization history](docs/visualization-history.md) for the
 replay rules.
+
+When checking a fresh model request, pass `regenerate=True` to `plot()` or `refine()` and
+check `viz.cache_hit`. Notebook reruns can otherwise replay saved code. See the
+[manual sign-in checks](docs/api.md#manually-check-the-sign-in-workflow) for a short
+verification walkthrough.
 
 ## Data and generated code
 

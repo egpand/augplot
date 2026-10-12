@@ -10,7 +10,20 @@ def complete(
     api_base: str | None,
     timeout: float,
     response_format: dict | None = None,
+    auth: str = "api_key",
+    profile_id: str | None = None,
 ) -> str:
+    if auth == "chatgpt":
+        if api_base is not None:
+            raise ConfigurationError("Custom api_base is unavailable with ChatGPT plan usage.")
+        from .chatgpt import complete as chatgpt_complete
+
+        return chatgpt_complete(
+            model=model, messages=messages, timeout=timeout,
+            response_format=response_format, profile_id=profile_id,
+        )
+    if auth != "api_key":
+        raise ConfigurationError("Unknown inference authentication mode.")
     # Importing augplot must never initialize an SDK or contact a provider.
     import litellm
 

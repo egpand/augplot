@@ -14,6 +14,10 @@ and closes figures opened during execution. Generated source may use ordinary Pa
 and NumPy transformations, assignment to local data, loops, comprehensions, and
 Matplotlib or Seaborn plotting APIs. There is no chart-type or artist-method manifest.
 
+Execution exposes a limited set of builtins, including `object` for NumPy annotation
+arrays. Pandas and Python date formatting can import their internal `time` helper;
+generated source still cannot import `time` directly.
+
 ## Security checks
 
 The validator rejects:
@@ -54,7 +58,9 @@ where executing model-produced Python is unacceptable.
 Fresh model output receives at most the configured number of repair attempts
 (`max_repairs=1` by default, or 2 for three total attempts). Each repair request
 contains a sanitized validation diagnostic, not data values or a runtime exception
-message. If repair fails, `ap.plot()` raises
+message. For an undefined name, the diagnostic identifies it only when a bounded
+identifier appears at the failing reference in generated source; library-internal
+names remain excluded. If repair fails, `ap.plot()` raises
 `GenerationError`. Rejected source is not executed, displayed, exported, or saved as
 visualization history. With history enabled, Augplot saves an `errors.json` summary and
 each rejected candidate under `.augplot/plots/<request-root>/failures/failure-*/` by

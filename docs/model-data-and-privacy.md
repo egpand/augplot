@@ -43,6 +43,29 @@ values and should be reviewed before sharing; they do not contain the full input
 profile. `cache_dir=None` disables diagnostic persistence.
 Augplot disables LiteLLM caching. Provider retention depends on the configured provider.
 
+## ChatGPT connection and storage
+
+ChatGPT sign-in opens your system browser for authorization and stores access and refresh
+credentials in the operating system's secure credential store.
+Registration metadata and model preferences live in Augplot's user configuration
+directory, separate from notebook files and `.augplot/` plot history. Tokens and account
+identifiers are not recorded in plot cache keys, exported Python, or generation
+diagnostics. Account commands expose only safe labels and connection status.
+
+ChatGPT generation uses the public Responses API with `store=false` and streamed output.
+This flag does not promise zero provider retention; provider policies still apply.
+The full data remains local, but the profile, prompt, generated code during refinement,
+and clarification answers cross the same disclosure boundary described above. Augplot
+does not import your ChatGPT conversation history. Model responses must complete
+successfully before their code is validated or executed.
+
+`ap.sign_out()` attempts to revoke the session and removes local credentials; it does not
+delete saved chart code or notebook output. Review those artifacts before sharing them.
+Permission to use the ChatGPT plan is distinct from signing in. Requests consume the
+eligible account's plan allowance; optional additional-credit use is controlled in
+ChatGPT's Usage settings. See
+[OpenAI's sign-in guide](https://learn.chatgpt.com/docs/sign-in-with-chatgpt).
+
 ## Disclosure limits
 
 `sample_rows=0` removes row and sequence samples, but **not** field names, dictionary
