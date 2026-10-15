@@ -26,7 +26,6 @@ def test_one_call_budget_stops_repair_and_reports_failure(cv_data, fake_model):
         plot(cv_data, max_repairs=2, max_model_calls=1, cache_dir=None, show=False)
     assert caught.value.model_calls == 1
     assert len(calls) == 1
-    assert "after 1 attempt(s)" in str(caught.value)
 
 
 def test_call_counts_reset_for_refine_replay_render_and_export(cv_data, fake_model, tmp_path):

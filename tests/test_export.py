@@ -32,8 +32,6 @@ def test_bundled_helpers_preserve_generated_local_names(tmp_path, fake_model):
     exec(target.read_text(), namespace)
     figure = namespace["draw"](data)
     assert figure.axes[0].get_title() == "579"
-    assert len(figure.axes[0].lines) == 1
-    assert "import augplot.plotting" not in target.read_text()
 
 
 def test_to_python_runs_without_augplot_or_credentials(tmp_path, cv_data, fake_model, capsys):

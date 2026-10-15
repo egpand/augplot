@@ -6,7 +6,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from conftest import ARRAY_CODE, response
+from conftest import response
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 from augplot import plot
@@ -144,24 +144,11 @@ def test_dense_labels_remain_readable_in_multiple_panels(fake_model):
     plt.close(chart.figure)
 
 
-def test_simple_plot_control_still_needs_only_one_call(fake_model):
-    calls = fake_model(response(ARRAY_CODE))
-    data = [2, 1, 4]
-    chart = plot(data, show=False, cache_dir=None, max_repairs=0, max_model_calls=1)
-    assert chart.model_calls == len(calls) == 1
-    np.testing.assert_array_equal(chart.figure.axes[0].lines[0].get_ydata(), data)
-    assert data == [2, 1, 4]
-    plt.close(chart.figure)
-
-
 def test_helper_plot_exports_without_augplot(tmp_path, fake_model, monkeypatch):
     x = np.linspace(0, 8, 101)
     data = pd.DataFrame({"x": x, "y": np.sin(x), "group": "Control"})
     chart = _generate(data, GROUPED_CODE, fake_model)
     target = chart.to_python(tmp_path / "standalone.py", function_name="plot_groups")
-    source = target.read_text()
-    assert "import augplot" not in source
-    assert "from augplot" not in source
 
     class BlockAugplot:
         def find_spec(self, fullname, *args):

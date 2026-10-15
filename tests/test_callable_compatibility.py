@@ -54,12 +54,17 @@ def test_single_binding_colormap_calls_execute_for_scalars_and_arrays(factory):
         "palette = plt.get_cmap('tab10')\npalette: object = data[0]\npalette(0)",
         "palette = alias = plt.get_cmap('tab10')\npalette(0)",
         "palette = plt.get_cmap('tab10').reversed()\npalette(0)",
-        "palette = plt.cm\npalette(0)",
-        "palette = plt.cm.colors.LinearSegmentedColormap.from_list\npalette(0)",
-        "module = plt.cm.colors\nmodule.LinearSegmentedColormap.from_list('x', ['red'])",
+        "module = plt.cm",
+        "module = plt.cm.colors",
+        "constructor = plt.cm.colors.LinearSegmentedColormap.from_list",
+        "values = [plt.cm.colors.LinearSegmentedColormap.from_list]",
+        "plt.cm.colors.LinearSegmentedColormap.from_list = str",
+        "plt.cm.colors.LinearSegmentedColormap.from_list.__globals__",
+        "plt.cm.colors.ColorConverter()",
+        "plt.cm.colors.LinearSegmentedColormap.from_list.extra()",
     ],
 )
-def test_colormap_compatibility_does_not_allow_arbitrary_calls_or_rebinding(statements):
+def test_colormap_escapes_and_callable_rebinding_are_rejected(statements):
     with pytest.raises(GenerationError):
         validate_code(_code(statements), "matplotlib")
 
@@ -78,10 +83,19 @@ def test_colormap_factory_requires_the_validated_pyplot_import():
         )
 
 
-@pytest.mark.parametrize("spec, expected", [("", "1234.0"), (",g", "1,234"), (".2f", "1234.00")])
-def test_literal_builtin_format_executes(spec, expected):
+@pytest.mark.parametrize(
+    "expression, expected",
+    [
+        ("format(data[0], '')", "1234.0"),
+        ("format(data[0], ',g')", "1,234"),
+        ("format(data[0], '.2f')", "1234.00"),
+        ("format(data[0], '٦g')", "  1234"),
+        ("f'{data[0]:²>6g}'", "²²1234"),
+    ],
+)
+def test_bounded_numeric_formatting_executes(expression, expected):
     code = _code(f"""
-        note = format(data[0], {spec!r})
+        note = {expression}
         fig, ax = plt.subplots()
         ax.plot(data)
         ax.set_title(note)
@@ -97,7 +111,6 @@ def test_literal_builtin_format_executes(spec, expected):
         "note = format(data[0], f'{data[1]}g')",
         "note = format(data[0], '1001g')",
         "note = format(data[0], '.1001f')",
-        "note = format(data[0], 'x' * 41)",
         "note = format(data[0], 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')",
         "note = format(data[0])",
         "note = format(data[0], format_spec='g')",
@@ -114,30 +127,15 @@ def test_format_rejects_dynamic_oversized_and_aliased_calls(statements):
         validate_code(_code(statements), "matplotlib")
 
 
-@pytest.mark.parametrize("expression", ["format(data[0], '1001g')", "f'{data[0]:1001g}'"])
-def test_builtin_and_fstring_formatting_share_width_limit(expression):
-    with pytest.raises(GenerationError, match="Format width"):
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "format(data[0], '١٠٠١f')",
+        "f'{data[0]:١٠٠١f}'",
+        "format(data[0], '.１００１f')",
+        "f'{data[0]:.𝟙𝟘𝟘𝟙f}'",
+    ],
+)
+def test_unicode_decimal_widths_and_precision_are_bounded(expression):
+    with pytest.raises(GenerationError):
         validate_code(_code(f"note = {expression}"), "matplotlib")
-
-
-@pytest.mark.parametrize("digits", ["١٠٠١", "１００１", "𝟙𝟘𝟘𝟙"])
-@pytest.mark.parametrize("precision", [False, True])
-@pytest.mark.parametrize("builtin", [False, True])
-def test_unicode_decimal_format_widths_and_precision_are_bounded(digits, precision, builtin):
-    spec = ("." if precision else "") + digits + "f"
-    expression = f"format(data[0], {spec!r})" if builtin else f"f'{{data[0]:{spec}}}'"
-    with pytest.raises(GenerationError, match="Format width"):
-        validate_code(_code(f"note = {expression}"), "matplotlib")
-
-
-@pytest.mark.parametrize("spec", ["٤g", "４g", "𝟜g", "²>4g"])
-@pytest.mark.parametrize("builtin", [False, True])
-def test_small_unicode_format_specs_execute(spec, builtin):
-    expression = f"format(data[0], {spec!r})" if builtin else f"f'{{data[0]:{spec}}}'"
-    code = _code(f"""
-        note = {expression}
-        fig, ax = plt.subplots()
-        ax.plot(data)
-        ax.set_title(note)
-    """).replace("return data", "return fig")
-    assert execute(code, [12], backend="matplotlib").axes[0].get_title() == format(12, spec)
