@@ -1,7 +1,7 @@
 # Generated-code guardrails
 
 Augplot validates model-generated Python before running it in the notebook process.
-The 0.2.0 validator focuses on security-sensitive operations and obvious resource
+The validator focuses on security-sensitive operations and obvious resource
 bombs. It is a defense-in-depth check, **not an operating-system sandbox**. Python
 libraries can have side effects that static checks cannot reliably identify.
 
