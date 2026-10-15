@@ -2,6 +2,26 @@
 
 All notable changes to Augplot are documented in this file.
 
+## Unreleased
+
+### Added
+
+- Reusable count-weighted empirical smoothing and renderer-aware direct curve labels,
+  with SciPy-backed helpers bundled into standalone Python exports.
+- Bounded grouped relationship profiles, numeric quantiles, and explicit coverage,
+  sampling, log-transform, and truncation metadata.
+- Optional `max_model_calls` budget shared across generation, repairs, and clarification,
+  and inspectable attempted-call counts on charts and Augplot failures.
+- An opt-in H–R visual-evaluation harness and unrelated complex-plot regressions.
+
+### Changed
+
+- Guide generation toward statistical smoothing and consistent external-colorbar layout.
+- Version helper/profile changes in history identity while preserving existing workflow,
+  live Figures, provider setup, and execution guardrails.
+- Refresh the H–R notebook with a short appearance-focused request and strict fresh
+  one-call generation. Document sparse and contaminated class-label limits.
+
 ## [0.2.0] - 2026-09-23
 
 ### Changed

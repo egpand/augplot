@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from .errors import GenerationError, InputRequiredError, ScopeError
 from .profiling import copy_data
 
-VALIDATOR_VERSION = 10
+VALIDATOR_VERSION = 12
 MAX_SOURCE_CHARS = 50_000
 MAX_AST_NODES = 4_000
 MAX_LITERAL_ITEMS = 2_000
@@ -22,6 +22,7 @@ _IMPORT_ALIASES = {
     "matplotlib.ticker": "ticker",
     "matplotlib.dates": "dates",
     "seaborn": "sns",
+    "augplot.plotting": "apx",
 }
 _BUILTINS = {
     "abs",
@@ -236,7 +237,10 @@ def parse_response(response: str) -> tuple[str, str]:
 
 
 def allowed_imports(backend: str) -> set[str]:
-    result = {"numpy", "pandas", "matplotlib.pyplot", "matplotlib.ticker", "matplotlib.dates"}
+    result = {
+        "numpy", "pandas", "matplotlib.pyplot", "matplotlib.ticker", "matplotlib.dates",
+        "augplot.plotting",
+    }
     if backend in ("auto", "seaborn"):
         result.add("seaborn")
     return result
@@ -345,6 +349,15 @@ class _Validator(ast.NodeVisitor):
             self.fail("call", "Recursive calls are not allowed.")
         if isinstance(node.ctx, (ast.Store, ast.Del)) and node.id in self.imports:
             self.fail("alias_shadowing", "Imported aliases cannot be reassigned.")
+        if isinstance(node.ctx, ast.Load) and node.id == "apx":
+            parent = self.parents.get(node)
+            call = self.parents.get(parent)
+            if not (
+                isinstance(parent, ast.Attribute) and parent.value is node
+                and parent.attr in {"smooth_trend", "label_curves"}
+                and isinstance(call, ast.Call) and call.func is parent
+            ):
+                self.fail("module_access", "The plotting helper module cannot be passed as data.")
 
     def visit_Attribute(self, node):
         name = node.attr
@@ -365,7 +378,15 @@ class _Validator(ast.NodeVisitor):
         # into internal modules or kept as a general-purpose capability.
         if isinstance(node.value, ast.Name) and node.value.id in self.imports:
             parent = self.parents.get(node)
-            if not (isinstance(parent, ast.Call) and parent.func is node) and (
+            if node.value.id == "apx" and (
+                name not in {"smooth_trend", "label_curves"}
+                or not (isinstance(parent, ast.Call) and parent.func is node)
+            ):
+                self.fail("module_access", "Only direct plotting-helper calls are permitted.")
+            if not (
+                isinstance(parent, ast.Call) and parent.func is node
+                or self._colormap_constructor(node)
+            ) and (
                 name not in _MODULE_VALUES
             ):
                 self.fail("module_access", "Module members must be called directly.")
@@ -374,6 +395,23 @@ class _Validator(ast.NodeVisitor):
         ):
             self.fail("dynamic_dispatch", "Dynamic methods must be called directly.")
         self.generic_visit(node)
+
+    def _colormap_constructor(self, node):
+        """Permit pyplot's legacy alias only as the complete palette constructor call."""
+        outer = node
+        while isinstance(self.parents.get(outer), ast.Attribute):
+            outer = self.parents[outer]
+        call = self.parents.get(outer)
+        if not isinstance(call, ast.Call) or call.func is not outer:
+            return False
+        members, root = [], outer
+        while isinstance(root, ast.Attribute):
+            members.append(root.attr)
+            root = root.value
+        return (
+            isinstance(root, ast.Name) and root.id == "plt"
+            and members == ["from_list", "LinearSegmentedColormap", "colors", "cm"]
+        )
 
     def visit_Call(self, node):
         if any(isinstance(arg, ast.Starred) for arg in node.args) or any(
@@ -688,9 +726,12 @@ def execute(code, data, *, backend, title=None, figsize=None):
         raise
     except Exception as exc:
         trace, line, origin = exc.__traceback__, None, None
+        helper = None
         while trace is not None:
             if trace.tb_frame.f_code.co_filename == "<augplot-generated>":
                 line = trace.tb_lineno
+            if trace.tb_frame.f_globals.get("__name__") == "augplot.plotting":
+                helper = trace.tb_frame.f_code.co_name
             origin = trace
             trace = trace.tb_next
         detail = (
@@ -698,6 +739,12 @@ def execute(code, data, *, backend, title=None, figsize=None):
             if (isinstance(exc, ValueError) and str(exc) == "x and y must be the same size")
             else None
         )
+        if isinstance(exc, ValueError) and helper in {"smooth_trend", "label_curves"}:
+            detail = (
+                "Trend fitting needs sufficient finite observations in supported segments."
+                if helper == "smooth_trend"
+                else "Required curve labels could not fit; enlarge the axes or reduce fontsize."
+            )
         if isinstance(exc, NameError):
             name = exc.name
             # Report only a bounded name referenced at the generated failure site;

@@ -233,3 +233,96 @@ def test_copy_nested_pandas_objects():
 def test_profile_options_validated(kwargs):
     with pytest.raises(ValueError):
         profile_data([1], **kwargs)
+
+
+def test_grouped_relationships_retain_nonlinear_coverage_and_rare_groups():
+    x = np.linspace(-4, 4, 1201)
+    labels = np.full(len(x), "usual", dtype=object)
+    labels[1:4] = "rare"
+    frame = pd.DataFrame({"input": x, "response": x**2, "kind": labels})
+    relationship = profile_data(frame)["data"]["relationships"][0]
+
+    assert relationship["count_scope"] == "exact"
+    assert relationship["finite_pairs"] == len(x)
+    assert relationship["group_by"] == "kind"
+    groups = {group["value"]: group for group in relationship["groups"]}
+    assert groups["rare"]["count"] == 3
+    usual = groups["usual"]
+    assert len(usual["bins"]) == 12
+    assert sum(bin_["count"] for bin_ in usual["bins"]) == usual["finite_pairs"]
+    medians = [bin_["y"][1] for bin_ in usual["bins"]]
+    assert medians[0] > medians[5] < medians[-1]
+    assert relationship == profile_data(frame.iloc[::-1])["data"]["relationships"][0]
+
+
+def test_relationship_request_ranking_and_column_positions():
+    frame = pd.DataFrame(np.arange(30).reshape(5, 6), columns=["a", "b", "c", 4, "a", "e"])
+    profile = profile_data(frame, request="Compare c with b and a")
+    assert profile["profile_version"] == 3
+    pairs = profile["data"]["relationships"]
+    assert [(pair["x_index"], pair["y_index"]) for pair in pairs] == [(2, 1), (2, 0)]
+    assert len(profile_data(frame)["data"]["relationships"]) == 2
+
+
+def test_finite_positive_quantiles_and_log_relationship_bins():
+    frame = pd.DataFrame({
+        "x": [0, 1, 2, 3, 4, 5],
+        "y": [1e-5, 1, 1e5, np.inf, np.nan, -1],
+    })
+    profile = profile_data(frame)
+    stats = profile["data"]["columns"][1]["stats"]
+    assert (stats["finite"], stats["positive"], stats["missing"]) == (4, 3, 1)
+    assert stats["quantiles"][0] == -1
+    assert stats["positive_log10_quantiles"] == [-5, -2.5, 0, 2.5, 5]
+    pair = profile["data"]["relationships"][0]
+    assert pair["finite_pairs"] == 4
+    assert pair["groups"][0]["bin_y_scale"] == "linear"
+    positive = profile_data(frame.iloc[:3])["data"]["relationships"][0]["groups"][0]
+    assert positive["bin_y_scale"] == "log10"
+    assert positive["bins"][0]["y"] == [-5, -5, -5]
+    json.dumps(profile, allow_nan=False)
+
+
+def test_relationship_sample_scope_and_empty_finite_groups():
+    frame = pd.DataFrame({
+        "x": np.arange(100_001), "y": np.ones(100_001),
+        "kind": ["missing"] + ["valid"] * 100_000,
+    })
+    frame.loc[0, "y"] = np.nan
+    relationship = profile_data(frame)["data"]["relationships"][0]
+    assert relationship["observations"] == 100_000
+    assert relationship["sampled"] is True
+    assert relationship["count_scope"] == "sampled"
+    group = next(group for group in relationship["groups"] if group["value"] == "missing")
+    assert group == {"value": "missing", "count": 1, "finite_pairs": 0}
+
+
+@pytest.mark.parametrize("budget", [500, 1000, 5000, 20_000])
+def test_relationships_obey_budget_and_mark_removed_bins(budget):
+    frame = pd.DataFrame({
+        "x": np.linspace(-4, 4, 21636),
+        "y": np.linspace(-4, 4, 21636)**2,
+        "z": np.geomspace(1e-6, 1e6, 21636),
+        "kind": np.tile(list("abcdefg"), 3091)[:21636],
+    })
+    profile = profile_data(frame, max_chars=budget)
+    assert len(json.dumps(profile, allow_nan=False)) <= budget
+    for pair in profile["data"].get("relationships", []):
+        for group in pair["groups"]:
+            if "bins" in group:
+                assert sum(bin_["count"] for bin_ in group["bins"]) == group["finite_pairs"]
+            elif group["finite_pairs"]:
+                assert group["bins_omitted"] is True
+    if budget == 20_000:
+        assert all(len(pair["groups"]) == 7 for pair in profile["data"]["relationships"])
+
+
+def test_high_cardinality_is_not_used_for_grouping_and_extremes_are_json_safe():
+    frame = pd.DataFrame({
+        "x": [np.finfo(float).max] * 30,
+        "y": np.arange(30),
+        "id": [f"row-{i}" for i in range(30)],
+    })
+    profile = profile_data(frame)
+    assert "group_by" not in profile["data"]["relationships"][0]
+    json.dumps(profile, allow_nan=False)

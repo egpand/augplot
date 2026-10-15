@@ -14,6 +14,8 @@ class ValidationViolation(TypedDict):
 class AugplotError(Exception):
     """Base class for Augplot errors."""
 
+    model_calls = 0
+
 
 class ConfigurationError(AugplotError, ValueError):
     """Missing or invalid configuration."""

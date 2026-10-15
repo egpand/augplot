@@ -10,8 +10,8 @@ from augplot.prompts import (
 def test_prompt_is_short_and_keeps_the_workflow_contract():
     prompt = " ".join(SYSTEM_PROMPT.split())
 
-    assert PROMPT_VERSION == "26"
-    assert len(SYSTEM_PROMPT) < 3_700
+    assert PROMPT_VERSION == "28"
+    assert len(SYSTEM_PROMPT) < 5_000
     assert "plot_data(data, *, title=None, figsize=None)" in prompt
     assert "Return only JSON" in prompt
     assert "status: ok" in prompt
@@ -35,7 +35,12 @@ def test_prompt_is_short_and_keeps_the_workflow_contract():
     assert "descriptive uncertainty calculated from supplied observations" in prompt
     assert "literal source-column strings" in prompt
     assert "select the Series and aggregate it directly" in prompt
-    assert "np.polyval(coefficients, x)" in prompt
+    assert "apx.smooth_trend(x, y)" in prompt
+    assert "full group observations, not prefiltered bin medians" in prompt
+    assert "apx.label_curves(ax, curves" in prompt
+    assert "Never undo colorbar spacing" in prompt
+    assert "lambdas" in prompt
+    assert "convert the primary endpoint limits" in prompt
 
 
 def test_response_format_is_a_strict_unified_schema():
