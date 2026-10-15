@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from .errors import GenerationError, InputRequiredError, ScopeError
 from .profiling import copy_data
 
-VALIDATOR_VERSION = 12
+VALIDATOR_VERSION = 13
 MAX_SOURCE_CHARS = 50_000
 MAX_AST_NODES = 4_000
 MAX_LITERAL_ITEMS = 2_000
@@ -33,6 +33,7 @@ _BUILTINS = {
     "enumerate",
     "filter",
     "float",
+    "format",
     "int",
     "isinstance",
     "issubclass",
@@ -260,6 +261,7 @@ class _Validator(ast.NodeVisitor):
         self.imports = set()
         self.loops = 0
         self.parents = {}
+        self.colormaps = set()
 
     def fail(self, rule, message):
         raise GenerationError(
@@ -333,6 +335,24 @@ class _Validator(ast.NodeVisitor):
                 ),
             ):
                 self.fail("syntax", f"{type(node).__name__} is not allowed in generated code.")
+        bindings = {}
+        for node in nodes:
+            if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                bindings[node.id] = bindings.get(node.id, 0) + 1
+            elif isinstance(node, ast.arg):
+                bindings[node.arg] = bindings.get(node.arg, 0) + 1
+            elif isinstance(node, ast.alias):
+                name = node.asname or node.name.split(".")[0]
+                bindings[name] = bindings.get(name, 0) + 1
+        if "format" in bindings:
+            self.fail("alias_shadowing", "The format builtin cannot be reassigned.")
+        self.colormaps = {
+            node.targets[0].id for node in nodes
+            if isinstance(node, ast.Assign) and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and bindings.get(node.targets[0].id) == 1
+            and self._colormap_factory(node.value)
+        }
         self.visit(fn)
 
     def visit_Import(self, node):
@@ -349,6 +369,10 @@ class _Validator(ast.NodeVisitor):
             self.fail("call", "Recursive calls are not allowed.")
         if isinstance(node.ctx, (ast.Store, ast.Del)) and node.id in self.imports:
             self.fail("alias_shadowing", "Imported aliases cannot be reassigned.")
+        if isinstance(node.ctx, ast.Load) and node.id == "format":
+            parent = self.parents.get(node)
+            if not (isinstance(parent, ast.Call) and parent.func is node):
+                self.fail("call", "The format builtin must be called directly.")
         if isinstance(node.ctx, ast.Load) and node.id == "apx":
             parent = self.parents.get(node)
             call = self.parents.get(parent)
@@ -413,17 +437,34 @@ class _Validator(ast.NodeVisitor):
             and members == ["from_list", "LinearSegmentedColormap", "colors", "cm"]
         )
 
+    def _colormap_factory(self, node):
+        """Recognize only direct factories rooted in the validated pyplot import."""
+        if "plt" not in self.imports or not isinstance(node, ast.Call):
+            return False
+        return self._colormap_constructor(node.func) or (
+            isinstance(node.func, ast.Attribute) and node.func.attr == "get_cmap"
+            and isinstance(node.func.value, ast.Name) and node.func.value.id == "plt"
+        )
+
     def visit_Call(self, node):
         if any(isinstance(arg, ast.Starred) for arg in node.args) or any(
             keyword.arg is None for keyword in node.keywords
         ):
             self.fail("star_args", "Starred call arguments are not allowed.")
         if isinstance(node.func, ast.Name):
-            if node.func.id not in _BUILTINS:
+            if node.func.id not in _BUILTINS | self.colormaps:
                 self.fail(
                     "call",
                     f"Indirect call {node.func.id}() at generated line {node.lineno} is blocked.",
                 )
+            if node.func.id == "format":
+                if (
+                    len(node.args) != 2 or node.keywords
+                    or not isinstance(node.args[1], ast.Constant)
+                    or not isinstance(node.args[1].value, str)
+                ):
+                    self.fail("format_string", "format() requires a literal format specification.")
+                self._check_format_spec(node.args[1].value)
         elif not isinstance(node.func, ast.Attribute):
             self.fail("call", "Indirect calls are not allowed.")
         if isinstance(node.func, ast.Attribute):
@@ -627,10 +668,15 @@ class _Validator(ast.NodeVisitor):
                 ):
                     self.fail("format_string", "Dynamic or oversized format specs are blocked.")
                 spec = "".join(str(part.value) for part in value.format_spec.values)
-                width = "".join(char for char in spec if char.isdigit())
-                if width and int(width) > 1_000:
-                    self.fail("format_string", "Format width exceeds the static size limit.")
+                self._check_format_spec(spec)
         self.generic_visit(node)
+
+    def _check_format_spec(self, spec):
+        if len(spec) > 40:
+            self.fail("format_string", "Dynamic or oversized format specs are blocked.")
+        width = "".join(char for char in spec if char.isdecimal())
+        if width and int(width) > 1_000:
+            self.fail("format_string", "Format width exceeds the static size limit.")
 
     def visit_ListComp(self, node):
         self._check_comprehension(node)

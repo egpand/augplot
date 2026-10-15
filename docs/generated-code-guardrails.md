@@ -16,7 +16,10 @@ Matplotlib or Seaborn plotting APIs. There is no chart-type or artist-method man
 
 Execution exposes a limited set of builtins, including `object` for NumPy annotation
 arrays. Pandas and Python date formatting can import their internal `time` helper;
-generated source still cannot import `time` directly.
+generated source still cannot import `time` directly. The builtin `format(value, spec)`
+is accepted only with a literal specification of at most 40 characters and bounded
+numeric widths/precision (at most 1,000, as for f-strings). It cannot be aliased,
+reassigned, or used as a callback.
 
 ## Security checks
 
@@ -56,6 +59,10 @@ used internally by the smoother and is not a permitted generated-code import.
 The complete constructor call `plt.cm.colors.LinearSegmentedColormap.from_list(...)`
 is accepted for custom palettes. This compatibility case does not expose the intermediate
 modules or constructor as stored values, and does not permit arbitrary module traversal.
+A local colormap object may be called when its only binding is one simple assignment
+from `plt.get_cmap(...)` or that complete palette constructor. The pyplot alias must
+come from its approved import. Rebinding, parameter/loop/comprehension shadowing,
+colormap aliases, and arbitrary stored callables remain rejected.
 
 The checks are intentionally modest. Data-sized loops and allocations are allowed,
 so a large input or expensive plotting operation can still use substantial CPU or

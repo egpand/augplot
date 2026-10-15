@@ -80,6 +80,10 @@ the final guard, but three required the later compatibility change. Fresh genera
 may vary. The [manifest](assets/hr-evaluation-results.json) records original and replay
 outcomes, versions, hashes, and review observations.
 
+A subsequent [five-call smoke evaluation](general-smoke-evaluation.md) covers the
+other notebooks and records the additional compatibility changes in validator 13.
+The H–R results above retain their original guard-12 evaluation provenance.
+
 ## Scientific limits and reference fidelity
 
 These are empirical guides for this prepared sample, not canonical stellar evolutionary

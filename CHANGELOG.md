@@ -16,6 +16,8 @@ All notable changes to Augplot are documented in this file.
 
 ### Changed
 
+- Accept single-binding pyplot colormap calls and bounded literal numeric formatting,
+  including Unicode-aware format-width limits.
 - Guide generation toward statistical smoothing and consistent external-colorbar layout.
 - Version helper/profile changes in history identity while preserving existing workflow,
   live Figures, provider setup, and execution guardrails.
