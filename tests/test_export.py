@@ -10,6 +10,30 @@ from conftest import CV_CODE, response
 from augplot import plot
 
 
+def test_bundled_helpers_preserve_generated_local_names(tmp_path, fake_model):
+    import numpy as np
+
+    code = '''def plot_data(data, *, title=None, figsize=None):
+    import matplotlib.pyplot as plt
+    import augplot.plotting as apx
+    smooth_trend = 123
+    augplot_helper_smooth_trend = 456
+    fig, ax = plt.subplots()
+    for x, y in apx.smooth_trend(data["x"], data["y"]):
+        ax.plot(x, y)
+    ax.set_title(str(smooth_trend + augplot_helper_smooth_trend))
+    return fig
+'''
+    fake_model(response(code))
+    data = {"x": np.linspace(0, 1, 100), "y": np.linspace(1, 2, 100)}
+    viz = plot(data, show=False, backend="matplotlib")
+    target = viz.to_python(tmp_path / "local_names.py", function_name="draw")
+    namespace = {}
+    exec(target.read_text(), namespace)
+    figure = namespace["draw"](data)
+    assert figure.axes[0].get_title() == "579"
+
+
 def test_to_python_runs_without_augplot_or_credentials(tmp_path, cv_data, fake_model, capsys):
     calls = fake_model(response(CV_CODE))
     viz = plot(cv_data, show=False)

@@ -2,6 +2,41 @@
 
 All notable changes to Augplot are documented in this file.
 
+## [0.3.0] - 2026-10-15
+
+### Added
+
+- ChatGPT sign-in with secure credential storage, account switching, model discovery,
+  and per-account model selection, alongside existing API-provider configuration.
+- Full-input category counts and saved rejected-generation diagnostics, with an optional
+  second repair attempt through `max_repairs=2`.
+- Reusable count-weighted empirical smoothing and renderer-aware direct curve labels,
+  with SciPy-backed helpers bundled into standalone Python exports.
+- Bounded grouped relationship profiles, numeric quantiles, and explicit coverage,
+  sampling, log-transform, and truncation metadata.
+- Optional `max_model_calls` budget shared across generation, repairs, and clarification,
+  and inspectable attempted-call counts on charts and Augplot failures.
+- An opt-in H–R visual-evaluation harness and unrelated complex-plot regressions.
+
+### Changed
+
+- Accept single-binding pyplot colormap calls and bounded literal numeric formatting,
+  including Unicode-aware format-width limits.
+- Guide generation toward statistical smoothing and consistent external-colorbar layout.
+- Version helper/profile changes in history identity while preserving existing workflow,
+  live Figures, provider setup, and execution guardrails.
+- Add SciPy 1.11.4 or newer as a runtime dependency for shared smoothing.
+- Refresh the H–R notebook with a short appearance-focused request and strict fresh
+  one-call generation. Document sparse and contaminated class-label limits.
+
+### Fixed
+
+- Allow library-internal date-formatting imports and NumPy `dtype=object` annotations
+  while retaining generated-code import and reflection restrictions.
+- Report undefined generated names in repair diagnostics without exposing raw data or
+  library-internal names, and mask account identity in ChatGPT plotting progress.
+- Avoid duplicate inline figures in the H–R notebook's standalone-export example.
+
 ## [0.2.0] - 2026-09-23
 
 ### Changed

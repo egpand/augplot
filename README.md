@@ -57,10 +57,11 @@ with an inline results dictionary, successive refinements, and an intentional
 
 For a one-sentence plotting request on an open stellar catalog, try the
 [Hertzsprung–Russell notebook](examples/hertzsprung-russell-one-shot.ipynb).
-Its committed output replays cached code and illustrates a successful chart; it does
-not measure fresh first-attempt success or compare model success rates. Full-input
-category context and supported-code guidance help generation and repair, but their
-effect on live one-shot success remains unmeasured.
+It requests fresh generation with a one-model-call budget. Grouped coverage summaries,
+shared empirical smoothing, and direct curve labeling support this and other complex
+charts. Inspect the figure and source: valid execution does not establish visual or
+scientific correctness. See [the evaluation notes](docs/hr-evaluation.md) for recorded
+live results and the sample's limitations.
 
 ## What can `data` be?
 
@@ -112,7 +113,8 @@ viz.to_python(function_name="plot_monthly_passengers")
 ```
 
 Inspect the current implementation with `viz.code`. The exported module needs neither
-Augplot nor provider credentials.
+Augplot nor provider credentials; any used plotting helpers are bundled into the export.
+Smoothed trends require SciPy alongside the usual plotting dependencies.
 
 ## Configuration
 
@@ -162,7 +164,9 @@ disable persistence. See [visualization history](docs/visualization-history.md) 
 replay rules.
 
 When checking a fresh model request, pass `regenerate=True` to `plot()` or `refine()` and
-check `viz.cache_hit`. Notebook reruns can otherwise replay saved code. See the
+check `viz.cache_hit`. Add `max_model_calls=1` to prevent repairs and clarification calls;
+`viz.model_calls` reports attempted provider calls. Notebook reruns can otherwise replay
+saved code. See the
 [manual sign-in checks](docs/api.md#manually-check-the-sign-in-workflow) for a short
 verification walkthrough.
 
@@ -182,7 +186,7 @@ but does not train models or return predictions, forecasts, or other analytical 
 
 ## Beta and security
 
-Augplot 0.2.0 is a beta release; APIs and saved-history formats may change before 1.0.
+Augplot 0.3.0 is a beta release; APIs and saved-history formats may change before 1.0.
 Review generated code before sensitive or security-critical use, and report
 vulnerabilities through the [security policy](SECURITY.md).
 

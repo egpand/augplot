@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_VERSION = "26"
+PROMPT_VERSION = "28"
 
 RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -60,7 +60,8 @@ Define exactly one function: `plot_data(data, *, title=None, figsize=None)`. Ret
 Matplotlib Figure with plotted data. Import only inside the function, using these names:
 `import numpy as np`, `import pandas as pd`, `import matplotlib.pyplot as plt`,
 `import matplotlib.ticker as ticker`, `import matplotlib.dates as dates`, and
-`import seaborn as sns` (only when the backend permits it). For `matplotlib`, use
+`import augplot.plotting as apx`; `import seaborn as sns` only when the backend permits it.
+For `matplotlib`, use
 Matplotlib only; for `seaborn` or `auto`, use either as appropriate.
 
 The profile contains samples and bounded category counts from the full input. It may
@@ -70,17 +71,29 @@ profile values. Work on a copy before changing data. Honor `title` and `figsize`
 provided.
 
 In named Pandas `.agg`, use literal source-column strings and simple aggregation
-strings. For variable columns, select the Series and aggregate it directly. Evaluate
-polynomial curves with `np.polyval(coefficients, x)`, not a stored `np.poly1d` object.
+strings. For variable columns, select the Series and aggregate it directly.
+
+For smooth empirical guides, use `apx.smooth_trend(x, y)`, returning a list of
+`(curve_x, curve_y)` segments. Pass full group observations, not prefiltered bin medians.
+Fit in the displayed response units: for log y, pass `np.log10(y)` then plot
+`10 ** curve_y`. It smooths robust bin centers with count weights, preserves sparse
+coverage, and avoids extrapolation. Do not substitute global polynomials or interpolation
+through every noisy median. Grouped profile bins describe coverage, not fit parameters.
+For direct labels, collect `(label, curve_x, curve_y)` in actual plotted units and call
+`apx.label_curves(ax, curves, color=..., fontsize=9)`. Set limits/scales and add colorbars
+before labeling. Do not silently omit a required class guide or label.
+The helper handles renderer access; do not call `fig.canvas` from generated code.
 
 # Safety
 
 Generated Python runs locally after validation. Use direct calls and in-memory
 transformations. Do not access files, URLs, the network, subprocesses, environment
-variables, or reflection; do not use eval/exec, private attributes, nested functions,
+variables, or reflection; do not use eval/exec, private attributes, lambdas, nested functions,
 classes, or while loops. Do not show, close, or save the figure, switch backends, use
 external fonts or TeX rendering, or pass arbitrary method names to Pandas dispatch.
 Keep static allocations and plot layouts modest.
+For secondary scales, use twinx/twiny and convert the primary endpoint limits; do not
+pass conversion callbacks to secondary_xaxis/secondary_yaxis.
 
 # Figure quality
 
@@ -94,6 +107,9 @@ axes space or a compact margin beside/below the axes, never above them. Reserve 
 the space needed for long category labels, legends, and notes; avoid large empty gaps.
 Place value labels clear of error bars and other marks. If optional annotations cannot
 fit legibly, omit them. Use layout spacing that keeps text clear of data and figure edges.
+Use one layout strategy. Prefer constrained layout and dedicated GridSpec space for
+colorbars. Never undo colorbar spacing with later subplots_adjust, tight_layout, or
+set_position calls. Keep colorbars outside the data axes and clear of axis ticks/labels.
 """
 
 

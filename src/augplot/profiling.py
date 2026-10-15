@@ -4,6 +4,7 @@ import copy
 import datetime as dt
 import json
 import math
+import re
 from itertools import islice
 
 import numpy as np
@@ -152,7 +153,12 @@ def _stats(values):
     ):
         numeric = sample.to_numpy(dtype=float, na_value=np.nan)
         finite = numeric[np.isfinite(numeric)]
+        result.update(finite=int(len(finite)), positive=int((finite > 0).sum()))
         if len(finite):
+            result["quantiles"] = _quantiles(finite)
+            positive = finite[finite > 0]
+            if len(positive) and np.log10(positive.max()) - np.log10(positive.min()) >= 3:
+                result["positive_log10_quantiles"] = _quantiles(np.log10(positive))
             # Scale first to avoid overflow while averaging large, finite values.
             scale = float(np.abs(finite).max()) or 1.0
             normalized = finite / scale
@@ -233,7 +239,104 @@ def _category_counts(values):
     }
 
 
-def profile_data(data, *, sample_rows=5, max_chars=20_000):
+def _quantiles(values, probabilities=(0, 0.25, 0.5, 0.75, 1)):
+    """Scale before interpolation to keep even extreme finite values JSON safe."""
+    scale = float(np.abs(values).max()) or 1.0
+    quantiles = [float(q) * scale for q in np.quantile(values / scale, probabilities)]
+    rounded = [float(format(q, ".5g")) for q in quantiles]
+    return [r if math.isfinite(r) else q for r, q in zip(rounded, quantiles, strict=True)]
+
+
+def _relationships(frame, columns, request):
+    """Describe at most two numeric pairs using at most 100,000 input rows."""
+    numeric = [
+        i for i, column in enumerate(columns)
+        if pd.api.types.is_numeric_dtype(frame.iloc[:, i].dtype)
+        and not pd.api.types.is_bool_dtype(frame.iloc[:, i].dtype)
+        and not pd.api.types.is_complex_dtype(frame.iloc[:, i].dtype)
+    ]
+    if len(numeric) < 2:
+        return []
+
+    def rank(i):
+        name = frame.columns[i]
+        match = (
+            re.search(r"(?<!\w)" + re.escape(str(name)) + r"(?!\w)", request, re.IGNORECASE)
+            if isinstance(name, (str, int, float)) and str(name) else None
+        )
+        return (match.start() if match else len(request) + 1, i)
+
+    numeric.sort(key=rank)
+    grouping = [
+        i for i, column in enumerate(columns)
+        if 0 < column.get("category_counts", {}).get("distinct", 0) <= 12
+    ]
+    group_index = min(grouping, key=rank) if grouping else None
+    positions = _indices(len(frame), 100_000)
+    sampled = len(positions) < len(frame)
+    subset = frame.iloc[positions]
+    if group_index is None:
+        masks = [(None, np.ones(len(subset), dtype=bool))]
+    else:
+        summary = columns[group_index]["category_counts"]
+        # Comparing the original scalar labels avoids truncated-string collisions.
+        source = frame.iloc[:, group_index]
+        distinct = source.dropna().drop_duplicates().tolist()
+        distinct.sort(key=lambda value: (type(value).__name__, json.dumps(_value(value))))
+        masks = [
+            (_value(label), subset.iloc[:, group_index].isin([label]).to_numpy(bool))
+            for label in distinct
+        ]
+        if summary["missing"]:
+            masks.append((None, subset.iloc[:, group_index].isna().to_numpy()))
+    result = []
+    x_index = numeric[0]
+    x = subset.iloc[:, x_index].to_numpy(dtype=float, na_value=np.nan)
+    for y_index in numeric[1:3]:
+        y = subset.iloc[:, y_index].to_numpy(dtype=float, na_value=np.nan)
+        finite = np.isfinite(x) & np.isfinite(y)
+        relationship = {
+            "x": columns[x_index]["name"], "x_index": x_index,
+            "y": columns[y_index]["name"], "y_index": y_index,
+            "observations": len(subset), "sampled": sampled,
+            "count_scope": "sampled" if sampled else "exact",
+            "finite_pairs": int(finite.sum()), "groups": [],
+        }
+        if group_index is not None:
+            relationship.update(group_by=columns[group_index]["name"], group_index=group_index)
+        for label, mask in masks:
+            valid = mask & finite
+            gx, gy = x[valid], y[valid]
+            group = {"value": label, "count": int(mask.sum()), "finite_pairs": len(gx)}
+            if len(gx):
+                group.update(x_quantiles=_quantiles(gx), y_quantiles=_quantiles(gy))
+                positive = gy[gy > 0]
+                log_scale = (
+                    len(positive) == len(gy)
+                    and np.log10(positive.max()) - np.log10(positive.min()) >= 3
+                )
+                bin_y = np.log10(gy) if log_scale else gy
+                group["bin_y_scale"] = "log10" if log_scale else "linear"
+                # Equal population bins retain sparse branches and nonlinear structure.
+                # Unique edges avoid arbitrary splitting of tied x observations.
+                scale = float(np.abs(gx).max()) or 1.0
+                edges = np.unique(np.quantile(gx / scale, np.linspace(0, 1, 13)))
+                assignments = np.searchsorted(edges[1:-1], gx / scale, side="right")
+                group["bins"] = []
+                for bin_index in range(max(1, len(edges) - 1)):
+                    selected = assignments == bin_index
+                    if selected.any():
+                        group["bins"].append({
+                            "count": int(selected.sum()),
+                            "x": _quantiles(gx[selected], (0, 1)),
+                            "y": _quantiles(bin_y[selected], (0.25, 0.5, 0.75)),
+                        })
+            relationship["groups"].append(group)
+        result.append(relationship)
+    return result
+
+
+def profile_data(data, *, sample_rows=5, max_chars=20_000, request=""):
     """Return a profile capped by serialized character count, never a sliced JSON string."""
     if not isinstance(sample_rows, int) or not 0 <= sample_rows <= 100:
         raise ValueError("sample_rows must be an integer between 0 and 100.")
@@ -266,6 +369,9 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
                 if categories is not None:
                     description["category_counts"] = categories
                 result["columns"].append(description)
+            relationships = _relationships(value, result["columns"], request)
+            if relationships:
+                result["relationships"] = relationships
             result["sample_rows"] = [
                 {
                     "index": _value(value.index[i]),
@@ -336,10 +442,10 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
             result["value"] = _value(value)
         return result
 
-    profile = {"profile_version": 2, "data": describe(data)}
+    profile = {"profile_version": 3, "data": describe(data)}
 
     def shrink(node):
-        samples, categories, other = [], [], []
+        samples, bins, summaries, categories, other = [], [], [], [], []
 
         def collect(value):
             if isinstance(value, dict):
@@ -349,6 +455,10 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
                         candidate = (len(json.dumps(item, ensure_ascii=True)), value, key)
                         if key in {"sample", "sample_rows"}:
                             samples.append(candidate)
+                        elif key == "bins":
+                            bins.append(candidate)
+                        elif key.endswith("quantiles"):
+                            summaries.append(candidate)
                         elif is_category_summary and key in {"common", "rare"}:
                             categories.append(candidate)
                         else:
@@ -359,7 +469,7 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
                     collect(item)
 
         collect(node)
-        for group in (samples, categories, other):
+        for group in (samples, bins, summaries, categories, other):
             if group:
                 return max(group, key=lambda candidate: candidate[0])
         return None
@@ -369,14 +479,26 @@ def profile_data(data, *, sample_rows=5, max_chars=20_000):
         profile["truncated"] = True
         if candidates is None:
             profile = {
-                "profile_version": 2,
+                "profile_version": 3,
                 "data": {"type": type(data).__name__},
                 "truncated": True,
             }
             break
         _, parent, key = candidates
         original_length = len(parent[key])
-        parent[key] = parent[key][: original_length // 2]
+        if key.endswith("quantiles"):
+            parent.pop(key)
+        elif key == "bins":
+            # Remove bins completely: a partial set would imply incomplete coverage.
+            parent.pop("bins")
+            parent["bins_omitted"] = True
+        else:
+            parent[key] = parent[key][: original_length // 2]
+            if key in {"groups", "relationships", "columns"}:
+                omitted_key = "omitted_" + key
+                parent[omitted_key] = (
+                    parent.get(omitted_key, 0) + original_length - len(parent[key])
+                )
         if key in {"common", "rare"} and "omitted_distinct" in parent:
             parent["omitted_distinct"] += original_length - len(parent[key])
         parent["truncated"] = True

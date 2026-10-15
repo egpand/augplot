@@ -7,10 +7,11 @@ from threading import Event, Lock, Thread
 
 from . import provider
 from .diagnostics import save_generation_failure
-from .errors import ConfigurationError, GenerationError, InputRequiredError
+from .errors import AugplotError, ConfigurationError, GenerationError, InputRequiredError
 from .execution import VALIDATOR_VERSION, execute, parse_response
 from .exporting import write_python_function
 from .history import HISTORY_VERSION, History, fingerprint, request_key
+from .plotting import PLOTTING_VERSION
 from .profiling import copy_data, profile_data, validate_data
 from .prompts import PROMPT_VERSION, RESPONSE_FORMAT, repair_guidance, system_prompt_for
 
@@ -74,6 +75,7 @@ class _Visualization:
         max_profile_chars: int = 20_000,
         timeout: float = 60,
         max_repairs: int = 1,
+        max_model_calls: int | None = None,
         cache_dir: str | Path | None = ".augplot/plots",
     ):
         if auth not in {"auto", "chatgpt", "api_key"}:
@@ -88,6 +90,10 @@ class _Visualization:
             raise ConfigurationError("max_profile_chars must be between 500 and 100,000.")
         if not isinstance(max_repairs, int) or max_repairs not in (0, 1, 2):
             raise ConfigurationError("max_repairs must be 0, 1, or 2.")
+        if max_model_calls is not None and (
+            type(max_model_calls) is not int or max_model_calls < 1
+        ):
+            raise ConfigurationError("max_model_calls must be a positive integer or None.")
         if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
             raise ConfigurationError("timeout must be a finite positive number of seconds.")
         self.model = model
@@ -102,6 +108,8 @@ class _Visualization:
         self.max_profile_chars = max_profile_chars
         self.timeout = timeout
         self.max_repairs = max_repairs
+        self.max_model_calls = max_model_calls
+        self.model_calls = 0
         self._history = History(cache_dir) if cache_dir is not None else None
         self.history_path: Path | None = None
         self.cache_hit = False
@@ -181,6 +189,10 @@ class _Visualization:
         code = None
         failures = []
         total_attempts = self.max_repairs + 1
+        if self.max_model_calls is not None:
+            total_attempts = min(total_attempts, self.max_model_calls - self.model_calls)
+        if total_attempts <= 0:
+            raise GenerationError("The model call budget is exhausted.")
         if self._transport == "chatgpt":
             from .auth import MANAGE_USAGE_URL
 
@@ -198,6 +210,7 @@ class _Visualization:
                     connection_options = {
                         "auth": "chatgpt", "profile_id": self._chatgpt_profile_id,
                     }
+                self.model_calls += 1
                 response = provider.complete(
                     model=model,
                     messages=messages,
@@ -225,7 +238,7 @@ class _Visualization:
                         "violations": exc.violations,
                     }
                 )
-                if attempt < self.max_repairs:
+                if attempt + 1 < total_attempts:
                     repair = {
                         "repair": (
                             "Return corrected JSON per the contract. Recheck the entire "
@@ -248,7 +261,7 @@ class _Visualization:
         diagnostics_path = save_generation_failure(failures, diagnostics_directory)
         location = f" Diagnostics saved to {diagnostics_path}." if diagnostics_path else ""
         raise GenerationError(
-            f"Could not generate a working visualization after {self.max_repairs + 1} "
+            f"Could not generate a working visualization after {total_attempts} "
             f"attempt(s). {last_error}{location}",
             code=code,
             violations=last_error.violations if last_error is not None else None,
@@ -262,6 +275,8 @@ class _Visualization:
             "history_version": HISTORY_VERSION,
             "validator_version": VALIDATOR_VERSION,
             "prompt_version": PROMPT_VERSION,
+            "profile_version": profile["profile_version"],
+            "plotting_version": PLOTTING_VERSION,
             "data": data_hash,
             "model": model,
             "api_base": api_base,
@@ -337,7 +352,13 @@ class _Visualization:
                 )
                 return resolved, request
             except InputRequiredError as exc:
-                if attempt == _MAX_CLARIFICATIONS or not _has_notebook_kernel():
+                exc.model_calls = self.model_calls
+                if (
+                    attempt == _MAX_CLARIFICATIONS
+                    or not _has_notebook_kernel()
+                    or self.max_model_calls is not None
+                    and self.model_calls >= self.max_model_calls
+                ):
                     raise
                 try:
                     answer = input(f"Augplot needs input: {exc}\n> ")
@@ -350,6 +371,9 @@ class _Visualization:
                     f"{prompt}\n\nAdditional user input for this request:\n"
                     + json.dumps(exchanges, ensure_ascii=False)
                 )
+            except AugplotError as exc:
+                exc.model_calls = self.model_calls
+                raise
         raise AssertionError("Clarification loop exhausted without a result.")
 
     def _accept(self, resolved):
@@ -383,9 +407,12 @@ class _Visualization:
 
     def fit(self, data, prompt: str = "auto", *, show: bool = True, regenerate: bool = False):
         """Reuse or generate the original plot. Replace existing state only after success."""
+        self.model_calls = 0
         self._validate_prompt(prompt)
         self._configuration()
-        profile = profile_data(data, sample_rows=self.sample_rows, max_chars=self.max_profile_chars)
+        profile = profile_data(
+            data, sample_rows=self.sample_rows, max_chars=self.max_profile_chars, request=prompt,
+        )
         snapshot = copy_data(data)
         data_hash = fingerprint(snapshot) if self._history is not None else None
         resolved, effective_prompt = self._resolve_with_clarification(
@@ -411,6 +438,7 @@ class _Visualization:
 
     def refine(self, prompt: str, *, show: bool = True, regenerate: bool = False):
         """Reuse or generate a revision identified by its parent and instruction."""
+        self.model_calls = 0
         self._require_fit()
         self._validate_prompt(prompt)
         resolved, _ = self._resolve_with_clarification(
@@ -432,6 +460,7 @@ class _Visualization:
         The fitted data remains the basis for future refinement. Pass new data to fit()
         if the schema or the data used for refinement should change.
         """
+        self.model_calls = 0
         self._require_fit()
         selected = self._data if data is None else data
         validate_data(selected)
@@ -445,6 +474,7 @@ class _Visualization:
         self, path: str | Path | None = None, *, function_name: str = "plot_visualization"
     ) -> Path:
         """Write reusable Python to a local module, without an LLM call."""
+        self.model_calls = 0
         self._require_fit()
         target = Path("augplot_utils.py") if path is None else Path(path)
         return write_python_function(self.code, target, function_name, backend=self.backend)

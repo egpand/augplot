@@ -28,6 +28,8 @@ A: original
 The original lookup combines a fingerprint of the full data—values, order, names,
 and types—with the prompt and generation settings. Each refinement also includes its
 exact parent version and instruction.
+Prompt, validator, profile, and shared plotting-helper versions are included, so a
+behavior change generates a new lookup rather than silently replaying incompatible code.
 
 ChatGPT history also distinguishes its transport from API-provider requests. It includes
 the selected model, never credentials or account identity. `ap.set_model()` affects new
