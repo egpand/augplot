@@ -71,7 +71,7 @@ The notebook and image above were subsequently refreshed by executing every cell
 clean kernel, downloading the catalog and making **one additional fresh model call**
 under guard 13. That run succeeded directly, including standalone export and reuse; its
 outputs involve no response replay. The exported example displays one chart. This extra
-run is recorded separately from the original 13-call comparison in the manifest.
+run is separate from the original 13-call comparison above.
 
 This is an **adaptive engineering evaluation**, not an unbiased prospective 90% success
 estimate. The request, guidance, helpers, and compatibility checks evolved between
@@ -79,8 +79,7 @@ phases. The baseline request prescribed binned low-degree fits; the revised requ
 leaves estimation to the shared implementation, so this comparison cannot isolate the
 contribution of profiling or smoothing. All seven fixed-prompt responses execute under
 the final guard, but three required the later compatibility change. Fresh generations
-may vary. The [manifest](assets/hr-evaluation-results.json) records original and replay
-outcomes, versions, hashes, and review observations.
+may vary. Detailed run records are retained locally outside the repository.
 
 A subsequent [five-call smoke evaluation](general-smoke-evaluation.md) covers the
 other notebooks and records the additional compatibility changes in validator 13.

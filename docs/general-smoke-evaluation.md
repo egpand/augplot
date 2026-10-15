@@ -40,8 +40,8 @@ zero model calls and did not edit generated code. Original first-attempt success
 **3/5**, while all five frozen responses work after the compatibility fixes. This small,
 adaptive smoke sample does not establish prospective one-call reliability.
 
-The [manifest](assets/general-smoke-results.json) records requests, source hashes,
-original outcomes and revalidation checks. Inputs are the public Seaborn `penguins` and
+Detailed run records are retained locally outside the repository. Inputs are the public
+Seaborn `penguins` and
 `flights` datasets plus the comparison notebook's inline anonymized table. Figures and
 raw responses were kept as local evaluation artifacts rather than replacing notebook
 outputs or adding further example-specific code to the package.
