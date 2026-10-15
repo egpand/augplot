@@ -90,7 +90,8 @@ expected = {{"White dwarfs", "Main sequence", "Subgiants", "Giants",
             "Bright giants", "Supergiants"}}
 assert {{text.get_text() for text in fig.axes[0].texts}} == expected
 assert len(fig.axes[0].lines) == 6
-left, right = fig.axes[:2]
+left = fig.axes[0]
+right = next(axis for axis in fig.axes[1:] if axis.get_shared_x_axes().joined(left, axis))
 assert left.get_yscale() == "log"
 assert right.yaxis_inverted()
 np.testing.assert_allclose(
@@ -128,6 +129,8 @@ assert inference_calls == 1
         manager.cleanup_resources()
     plot_cell = next(cell for cell in executed.cells if cell.id == "hr-plot")
     assert any("image/png" in output.get("data", {}) for output in plot_cell.outputs)
+    export_cell = executed.cells[-2]
+    assert sum("image/png" in output.get("data", {}) for output in export_cell.outputs) == 1
     code_cell = next(cell for cell in executed.cells if cell.id == "hr-code")
     assert any(
         output.get("data", {}).get("text/plain") == source for output in code_cell.outputs

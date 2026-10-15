@@ -41,7 +41,7 @@ process/OS isolation before deployment.
 ## Recorded evaluation: 2026-10-15
 
 We used the existing ChatGPT connection with `gpt-6.1-sol`, the same prepared public HYG
-v4.1 table (21,636 plotted stars), and 13 fresh model calls in total. Each attempt made
+v4.1 table (21,636 plotted stars), and an original comparison batch of 13 fresh model calls. Each attempt made
 exactly one provider call, with history replay and repairs disabled. Failed calls were
 counted. No generated curve code was edited to improve a picture.
 
@@ -67,9 +67,11 @@ supported class ranges; six identifiable direct labels; matching V-band luminosi
 absolute-magnitude scales; legible axes and any external colorbar. Local numerical
 inspection additionally checked 21,636 scatter observations, the magnitude conversion,
 all six labels, and agreement with smoothing the complete observations for each class.
-The representative image above is fixed-prompt attempt 3, which rendered on its original
-fresh call; its source and explanation are recorded in the notebook. Saved notebook
-outputs were recorded by local replay of that response without further model calls.
+The notebook and image above were subsequently refreshed by executing every cell in a
+clean kernel, downloading the catalog and making **one additional fresh model call**
+under guard 13. That run succeeded directly, including standalone export and reuse; its
+outputs involve no response replay. The exported example displays one chart. This extra
+run is recorded separately from the original 13-call comparison in the manifest.
 
 This is an **adaptive engineering evaluation**, not an unbiased prospective 90% success
 estimate. The request, guidance, helpers, and compatibility checks evolved between
