@@ -2,6 +2,16 @@
 
 All notable changes to Augplot are documented in this file.
 
+## Unreleased
+
+### Removed
+
+- Development-only evaluation runner, reports, and unreferenced screenshots.
+
+### Fixed
+
+- Display the quickstart standalone-export figure exactly once.
+
 ## [0.3.0] - 2026-10-15
 
 ### Added

@@ -60,8 +60,7 @@ For a one-sentence plotting request on an open stellar catalog, try the
 It requests fresh generation with a one-model-call budget. Grouped coverage summaries,
 shared empirical smoothing, and direct curve labeling support this and other complex
 charts. Inspect the figure and source: valid execution does not establish visual or
-scientific correctness. See [the evaluation notes](docs/hr-evaluation.md) for recorded
-live results and the sample's limitations.
+scientific correctness. The notebook explains the sample's limitations.
 
 ## What can `data` be?
 

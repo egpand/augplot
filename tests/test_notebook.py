@@ -193,6 +193,11 @@ provider.complete = offline_complete
             dimensions = output.metadata["image/png"]
             assert width // 2 == dimensions["width"]
             assert height // 2 == dimensions["height"]
+    export_cell = next(cell for cell in executed.cells if cell.id == "augplot-12")
+    assert sum(
+        bool({"image/png", "image/svg+xml"} & output.get("data", {}).keys())
+        for output in export_cell.outputs
+    ) == 1
     exported = tmp_path / "augplot_utils.py"
     assert exported.exists()
     assert "def plot_penguin_bills" in exported.read_text()
