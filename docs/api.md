@@ -66,6 +66,7 @@ plt = ap.plot(
     max_profile_chars=20_000,
     timeout=60,
     max_repairs=1,
+    max_model_calls=None,
     cache_dir=".augplot/plots",
     show=True,
     regenerate=False,
@@ -84,6 +85,7 @@ plt = ap.plot(
 | `max_profile_chars` | Maximum serialized profile size, from 500 to 100,000. |
 | `timeout` | Provider timeout in seconds. |
 | `max_repairs` | Number of repair requests after the initial attempt: 0, 1 (default), or 2. |
+| `max_model_calls` | Optional positive cap across generation, repairs, and clarification for each `fit()` or `refine()`; `None` preserves existing limits. |
 | `cache_dir` | Visualization-history directory; `None` disables persistence. |
 | `show` | Display the resulting figure in the notebook. |
 | `regenerate` | Request new code instead of replaying the matching saved step. |
@@ -99,8 +101,13 @@ the limits of `sample_rows` and `max_profile_chars`.
 
 Fresh generations print the current attempt (`plotting` or `repairing`) and when returned
 code is checked. A request still waiting after 20 seconds prints another status line.
-ChatGPT requests identify the account and model and include a link to manage usage.
+ChatGPT requests mask the account identity, identify the model, and link to manage usage.
 Saved-history replays do not make model requests or print these progress messages.
+
+For a strict fresh one-call attempt, set `max_model_calls=1, regenerate=True`. If input
+is missing, Augplot raises `InputRequiredError` without opening a clarification prompt
+that would exceed the budget. Failures expose `exc.model_calls`; even an interrupted
+provider request counts as one attempt. No automatic provider retry is enabled.
 
 ## Refine the current chart
 
@@ -152,6 +159,7 @@ plt.figure       # Matplotlib figure
 plt.code         # Complete generated Python function
 plt.explanation  # Model's short chart explanation
 plt.profile      # Bounded data profile sent to the model
+plt.model_calls  # Provider attempts during the last operation; replay/render/export use 0
 ```
 
 For syntax-highlighted source in Jupyter:
@@ -181,6 +189,10 @@ function without a model call. The default module is `augplot_utils.py` in the n
 working directory. New names are appended. Reusing a name updates only a function marked
 as Augplot-generated; user-authored definitions are never overwritten.
 
+When generated code uses `augplot.plotting`, the export bundles just the used helpers
+and their dependencies as local definitions. It imports no Augplot modules and requires
+no credentials. SciPy is required for smoothed trends.
+
 Pass a path when another module is preferred:
 
 ```python
@@ -190,6 +202,30 @@ plt.to_python("analysis/plots.py", function_name="plot_results")
 The returned `Path` identifies the file that was written. The generated function accepts
 `data` and optional `title` and `figsize` keyword arguments and does not require Augplot or
 provider credentials at runtime.
+
+## Shared plotting helpers
+
+Generated code can use `import augplot.plotting as apx`; these functions are also usable
+directly in ordinary Python:
+
+- `smooth_trend(x, y, *, smoothing=None, max_gap=None, points=200)` returns a list of
+  `(curve_x, curve_y)` arrays. Fit units are explicit: pass `np.log10(y)` and plot
+  `10 ** curve_y` for multiplicative response data. Adjacent sparse bins merge toward
+  eight observations per median anchor; count-weighted cubic splines select smoothing
+  by generalized cross-validation. Fewer than five anchors use a weighted straight line.
+  No segment extends beyond its anchor range. Gaps wider than both eight typical unique
+  spacings and 10% of the x range split support; `max_gap` overrides that threshold.
+  Isolated observations remain for scatter plotting but support no curve; entirely
+  unsupported input raises `ValueError`. These are descriptive guides, not physical laws
+  or confidence intervals. Normalized `smoothing` can override automatic regularization.
+- `label_curves(ax, curves, *, color=None, fontsize=9)` labels `(label, x, y)` triples in
+  plotted coordinates, including log axes. Set limits/scales and reserve colorbar space
+  first. It measures text, avoids existing text and curves, and returns annotations with
+  short leaders. Repeated segment labels receive one label per call. If placement cannot
+  fit, it raises `ValueError` rather than silently omitting a required label.
+
+The helpers make no model requests. Their defaults cannot establish the scientific
+validity of arbitrary fits. Review sparse or mixed populations and the resulting image.
 
 ## Load Seaborn example data
 

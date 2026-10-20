@@ -17,6 +17,16 @@ The profile is not anonymized. Inspect or sanitize sensitive data before calling
 Numeric statistics use at most 1,000 spread-out observations: sampled missing count,
 min, max, mean, and standard deviation where applicable. Augplot does not send full
 `pandas.DataFrame.describe()` output or a row-level missingness mask.
+Numeric profiles also include finite/positive sample counts and five-number quantiles;
+positive values spanning at least three decades receive labeled log10 quantiles.
+
+DataFrames can also send up to two numeric relationship summaries, prioritized by column
+mentions in the request and then schema order. Each uses at most 100,000 spread-out rows
+and can group by one eligible field with at most 12 observed categories. Groups include
+finite-pair counts, quantiles, and up to 12 occupied x-bin ranges with counts and y
+quartiles. Positive responses spanning several decades may use explicitly labeled log10
+bin summaries. Counts say whether they refer to the exact input or sampled rows. These
+summaries disclose relationships and small groups even when `sample_rows=0`.
 
 For text, boolean, and Pandas categorical fields in DataFrames, Series, and record
 tables, Augplot counts all values locally. The profile reports exact missing and
@@ -71,6 +81,8 @@ ChatGPT's Usage settings. See
 `sample_rows=0` removes row and sequence samples, but **not** field names, dictionary
 keys or scalar values, statistics, or category labels and counts. `max_profile_chars`
 (default 20,000) caps only the serialized profile, not the whole request. When needed,
-Augplot trims samples before category counts and marks omissions. Even a bounded profile
+Augplot trims samples and relationship-bin detail before category counts and marks
+omissions; complete quantile arrays and bin sets are omitted rather than cut midway.
+Even a bounded profile
 can disclose a small or distinctive dataset; remove identifying fields or values before
 passing sensitive data to Augplot.

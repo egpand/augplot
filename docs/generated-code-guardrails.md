@@ -1,7 +1,7 @@
 # Generated-code guardrails
 
 Augplot validates model-generated Python before running it in the notebook process.
-The 0.2.0 validator focuses on security-sensitive operations and obvious resource
+The validator focuses on security-sensitive operations and obvious resource
 bombs. It is a defense-in-depth check, **not an operating-system sandbox**. Python
 libraries can have side effects that static checks cannot reliably identify.
 
@@ -16,13 +16,17 @@ Matplotlib or Seaborn plotting APIs. There is no chart-type or artist-method man
 
 Execution exposes a limited set of builtins, including `object` for NumPy annotation
 arrays. Pandas and Python date formatting can import their internal `time` helper;
-generated source still cannot import `time` directly.
+generated source still cannot import `time` directly. The builtin `format(value, spec)`
+is accepted only with a literal specification of at most 40 characters and bounded
+numeric widths/precision (at most 1,000, as for f-strings). It cannot be aliased,
+reassigned, or used as a callback.
 
 ## Security checks
 
 The validator rejects:
 
-- Imports outside NumPy, Pandas, Matplotlib pyplot/ticker/dates, and Seaborn; Seaborn
+- Imports outside NumPy, Pandas, Matplotlib pyplot/ticker/dates, Seaborn, and the shared
+  `augplot.plotting` helpers; Seaborn
   imports also require a compatible backend.
 - File, network, subprocess, environment, serialization, and plot-export APIs,
   including read/write/save methods and module-internal traversal.
@@ -43,9 +47,22 @@ fig.savefig("chart.png")
 
 For named Pandas `.agg`, use literal source-column strings and simple aggregation names
 in each tuple. If the column name is stored in a variable, aggregate the selected Series
-directly. For polynomial guide curves, evaluate coefficients with
-`np.polyval(coefficients, x)` instead of calling a stored `np.poly1d` object. Generation
-and repair prompts now include these patterns.
+directly. For empirical smooth guides, the generation prompt recommends the shared
+`smooth_trend` helper instead of hand-written global polynomial fits.
+
+`import augplot.plotting as apx` exposes only direct calls to `apx.smooth_trend` and
+`apx.label_curves`. Generated code cannot alias or pass this module as data, access other
+members, or change its attributes. The trusted label helper can measure its renderer;
+generated code still cannot access `fig.canvas`. Exports bundle the used trusted helper
+definitions; generated code still cannot define additional functions itself. SciPy is
+used internally by the smoother and is not a permitted generated-code import.
+The complete constructor call `plt.cm.colors.LinearSegmentedColormap.from_list(...)`
+is accepted for custom palettes. This compatibility case does not expose the intermediate
+modules or constructor as stored values, and does not permit arbitrary module traversal.
+A local colormap object may be called when its only binding is one simple assignment
+from `plt.get_cmap(...)` or that complete palette constructor. The pyplot alias must
+come from its approved import. Rebinding, parameter/loop/comprehension shadowing,
+colormap aliases, and arbitrary stored callables remain rejected.
 
 The checks are intentionally modest. Data-sized loops and allocations are allowed,
 so a large input or expensive plotting operation can still use substantial CPU or
@@ -56,7 +73,10 @@ where executing model-produced Python is unacceptable.
 ## Validation failures and saved plots
 
 Fresh model output receives at most the configured number of repair attempts
-(`max_repairs=1` by default, or 2 for three total attempts). Each repair request
+(`max_repairs=1` by default, or 2 for three total attempts). Attempts
+also respect `max_model_calls` when set; that cap includes clarification requests.
+`max_model_calls=1` makes a single attempt, with call counts available on the chart or
+raised Augplot exception. Each repair request
 contains a sanitized validation diagnostic, not data values or a runtime exception
 message. For an undefined name, the diagnostic identifies it only when a bounded
 identifier appears at the failing reference in generated source; library-internal
